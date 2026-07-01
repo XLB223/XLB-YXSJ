@@ -464,6 +464,30 @@
         align-self: flex-end;
       }
     }
+
+    /* ?????? */
+    .upgrade-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999; justify-content:center; align-items:center; }
+    .upgrade-overlay.show { display:flex; }
+    .upgrade-modal { background:#fff; border-radius:16px; padding:32px; max-width:420px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); position:relative; }
+    .upgrade-modal h3 { margin:0 0 8px; font-size:22px; color:#1a1a2e; }
+    .upgrade-modal .upgrade-icon { font-size:48px; margin-bottom:12px; }
+    .upgrade-modal p { color:#666; margin:8px 0 20px; line-height:1.6; }
+    .upgrade-modal .upgrade-plan { background:#f0f4ff; border-radius:12px; padding:16px; margin:16px 0; }
+    .upgrade-modal .upgrade-price { font-size:28px; font-weight:700; color:#4f46e5; }
+    .upgrade-modal .upgrade-price span { font-size:14px; color:#888; font-weight:400; }
+    .upgrade-modal .btn-upgrade { display:block; width:100%; padding:14px; background:linear-gradient(135deg,#4f46e5,#7c3aed); color:#fff; border:none; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; margin:8px 0; }
+    .upgrade-modal .btn-upgrade:hover { opacity:0.9; }
+    .upgrade-modal .btn-activate { display:block; width:100%; padding:12px; background:transparent; color:#4f46e5; border:2px solid #4f46e5; border-radius:10px; font-size:14px; font-weight:500; cursor:pointer; margin:4px 0; }
+    .upgrade-modal .activate-section { display:none; margin-top:16px; }
+    .upgrade-modal .activate-section.show { display:block; }
+    .upgrade-modal .activate-input { width:100%; padding:12px; border:2px solid #e0e0e0; border-radius:10px; font-size:15px; text-align:center; margin:8px 0; box-sizing:border-box; }
+    .upgrade-modal .activate-input:focus { border-color:#4f46e5; outline:none; }
+    .upgrade-modal .btn-submit-activate { width:100%; padding:12px; background:#22c55e; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; }
+    .upgrade-modal .btn-close-modal { position:absolute; top:12px; right:16px; background:none; border:none; font-size:24px; cursor:pointer; color:#999; }
+    .upgrade-modal .activate-error { color:#ef4444; font-size:13px; margin-top:8px; display:none; }
+    .pro-badge { display:none; background:linear-gradient(135deg,#f59e0b,#ef4444); color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; margin-left:8px; vertical-align:middle; }
+    .usage-info { text-align:center; font-size:13px; color:#888; margin:8px 0; }
+    .usage-info .remaining { font-weight:700; color:#4f46e5; }
   </style>
 </head>
 <body>
@@ -471,9 +495,11 @@
     <header class="header">
       <h1>跨境AI Listing生成器</h1>
       <p>输入产品信息，一键生成 Amazon 多语言 Listing</p>
+        <span class="pro-badge" id="proBadge">PRO</span>
     </header>
 
     <div class="status-bar" id="statusBar"></div>
+    <div class="usage-info" id="usageInfo">?????<span class="remaining" id="remainingCount">3</span> ?</div>
 
     <section class="card">
       <h2 class="card-title">产品信息</h2>
@@ -549,11 +575,42 @@
     <footer class="footer">Powered by DeepSeek</footer>
   </div>
 
+  <div class="upgrade-overlay" id="upgradeOverlay">
+    <div class="upgrade-modal">
+      <button class="btn-close-modal" onclick="closeUpgradeModal()">&times;</button>
+      <div class="upgrade-icon">&#x1f680;</div>
+      <h3>?????????</h3>
+      <p>???? <b>3</b> ???? Pro ????</p>
+      <div class="upgrade-plan">
+        <div class="upgrade-price">&yen;19.9<span>/?</span></div>
+        <div style="color:#888;font-size:13px;">? &yen;99/? &middot; ???? &middot; ???</div>
+      </div>
+      <button class="btn-upgrade" onclick="goPay()">&#x1f4b3; ???? Pro</button>
+      <button class="btn-activate" onclick="showActivateInput()">??????????</button>
+      <div class="activate-section" id="activateSection">
+        <input class="activate-input" id="activateCodeInput" placeholder="??????" />
+        <button class="btn-submit-activate" onclick="activatePro()">&#x2714; ?? Pro</button>
+        <div class="activate-error" id="activateError">????????????</div>
+      </div>
+    </div>
+  </div>
+
   <script>
+
     let LANG_META = {};
     let selectedLangs = new Set();
     let activeRegion = "全部";
     const regionSelections = {};
+
+    const DAILY_LIMIT = 3;
+    const USAGE_KEY = "listing_usage";
+    const PRO_KEY = "listing_pro";
+    const ACTIVATION_CODES = ["PRO2026", "XLBVIP", "LISTING99"];
+    function getToday() { return new Date().toISOString().slice(0,10); }
+    function getUsage() { try { const d=JSON.parse(localStorage.getItem(USAGE_KEY)); if(d&&d.date===getToday()) return d.count; }catch(e){} return 0; }
+    function addUsage() { const today=getToday(); let d={date:today,count:1}; try{const e=JSON.parse(localStorage.getItem(USAGE_KEY));if(e&&e.date===today)d.count=e.count+1;}catch(e){} localStorage.setItem(USAGE_KEY,JSON.stringify(d)); updateUsageUI(); }
+    function isPro() { try{return localStorage.getItem(PRO_KEY)==="true";}catch(e){return false;} }
+    function canGenerate() { return isPro() || getUsage() < DAILY_LIMIT; }
 
     const form = document.getElementById("listingForm");
     const generateBtn = document.getElementById("generateBtn");
@@ -819,6 +876,11 @@
       statusBar.className = `status-bar visible ${type}`;
     }
 
+    function hideStatus() {
+      statusBar.textContent = "";
+      statusBar.className = "status-bar";
+    }
+
     async function checkServerHealth() {
       if (window.location.protocol === "file:") {
         showStatus(
@@ -843,7 +905,7 @@
         if (!data.hasApiKey) {
           showStatus("服务器已连接，但未配置 DEEPSEEK_API_KEY。请在 .env 文件中添加 Key 后重启。", "warn");
         } else {
-          showStatus("服务器已连接，可以开始生成多语言 Listing", "ok");
+          hideStatus();
         }
         return true;
       } catch {
@@ -876,6 +938,11 @@
         return;
       }
 
+      if (!canGenerate()) {
+        showUpgradeModal();
+        return;
+      }
+
       generateBtn.disabled = true;
       generateBtn.textContent = `生成中（${languages.length} 种语言，约 ${Math.ceil(languages.length / 4)} 批）...`;
 
@@ -905,6 +972,7 @@
         }
 
         currentListings = data.listings || data;
+        addUsage();
         saveProductHistory({ productName, sellingPoints, category });
         renderResults(currentListings, languages);
         resultsSection.classList.add("visible");
@@ -1057,6 +1125,24 @@
         alert("复制失败，请手动选择文本复制");
       }
     }
+    function getRemaining() { return isPro() ? "∞" : Math.max(0, DAILY_LIMIT - getUsage()); }
+    function updateUsageUI() {
+      document.getElementById("remainingCount").textContent = getRemaining();
+      if (isPro()) {
+        document.getElementById("usageInfo").style.display = "none";
+        document.getElementById("proBadge").style.display = "inline-block";
+      } else {
+        document.getElementById("usageInfo").style.display = "block";
+        document.getElementById("proBadge").style.display = "none";
+      }
+    }
+    function showUpgradeModal() { document.getElementById("upgradeOverlay").classList.add("show"); }
+    function closeUpgradeModal() { document.getElementById("upgradeOverlay").classList.remove("show"); document.getElementById("activateSection").classList.remove("show"); document.getElementById("activateError").style.display="none"; }
+    function showActivateInput() { document.getElementById("activateSection").classList.add("show"); }
+    function goPay() { alert("请联系客服获取付费链接（微信：xlb_service）"); }
+    function activatePro() { const code=document.getElementById("activateCodeInput").value.trim().toUpperCase(); if(ACTIVATION_CODES.includes(code)){localStorage.setItem(PRO_KEY,"true");closeUpgradeModal();updateUsageUI();alert("激活成功！你现在是 Pro 用户，无限使用！");}else{document.getElementById("activateError").style.display="block";} }
+    updateUsageUI();
+
   </script>
 </body>
 </html>
