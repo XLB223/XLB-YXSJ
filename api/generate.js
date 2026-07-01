@@ -13,6 +13,21 @@ function setCors(req, res) {
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        resolve({});
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
 export default async function handler(req, res) {
   setCors(req, res);
 
@@ -27,7 +42,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const payload = req.body || {};
+    const payload = await readBody(req);
     const result = await handleGenerateRequest(payload, process.env);
     res.status(200).json(result);
   } catch (error) {
