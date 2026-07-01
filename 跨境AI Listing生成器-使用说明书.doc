@@ -1,0 +1,173 @@
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+<meta charset="utf-8">
+<meta name=ProgId content=Word.Document>
+<meta name=Generator content="Microsoft Word">
+<title>跨境 AI Listing 生成器 - 使用说明书</title>
+<style>
+  body { font-family: "微软雅黑", "Microsoft YaHei", sans-serif; font-size: 11pt; line-height: 1.8; color: #1f2937; }
+  h1 { text-align: center; color: #2563eb; font-size: 22pt; margin-bottom: 6pt; }
+  h2 { color: #1f2937; font-size: 14pt; margin-top: 18pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 4pt; }
+  h3 { color: #374151; font-size: 12pt; margin-top: 14pt; }
+  .subtitle { text-align: center; color: #6b7280; font-size: 11pt; margin-bottom: 24pt; }
+  .highlight { background: #eff6ff; border-left: 4px solid #2563eb; padding: 12pt 16pt; margin: 12pt 0; }
+  .highlight-title { font-weight: bold; color: #2563eb; margin-bottom: 8pt; }
+  ul, ol { margin: 8pt 0 8pt 20pt; }
+  li { margin-bottom: 6pt; }
+  .faq-q { font-weight: bold; margin-top: 10pt; }
+  .faq-a { margin-left: 12pt; color: #374151; }
+  .footer { text-align: center; color: #9ca3af; margin-top: 30pt; font-size: 10pt; }
+  table { border-collapse: collapse; width: 100%; margin: 12pt 0; }
+  th, td { border: 1px solid #e5e7eb; padding: 8pt 10pt; text-align: left; }
+  th { background: #f8fafc; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>跨境 AI Listing 生成器</h1>
+<p class="subtitle">产品使用说明书</p>
+
+<p>本说明书适用于「跨境 AI Listing 生成器」本地版及网页版，帮助跨境卖家快速生成 Amazon 等平台所需的多语言商品 Listing 文案。</p>
+
+<h2>一、核心优势</h2>
+
+<div class="highlight">
+<p class="highlight-title">为什么选择本工具？</p>
+<ul>
+  <li><strong>一键多语言：</strong>支持 36 种语言，覆盖亚洲、欧洲、非洲、美洲四大洲主要跨境市场。不是简单翻译，而是针对各站点做本地化 SEO 优化。</li>
+  <li><strong>专业 Listing 结构：</strong>自动生成标题、核心优势（5 条）、产品描述、关键词，符合 Amazon Listing 规范。</li>
+  <li><strong>按大洲筛选语言：</strong>可按「亚洲 / 欧洲 / 非洲 / 美洲」筛选，只显示当前大洲语言，界面清晰、操作不混乱。</li>
+  <li><strong>手动勾选，灵活可控：</strong>不强制全选，您可按需勾选任意语言组合，适配不同站点策略。</li>
+  <li><strong>历史记录本地保存：</strong>成功生成后，产品名称、卖点、产品类型自动保存，下次可快速填充，无需重复输入。</li>
+  <li><strong>历史仅保存在本机：</strong>记录存储在浏览器 localStorage 中，<strong>不会上传到任何服务器</strong>，有效保护商业信息。</li>
+  <li><strong>一键复制：</strong>生成结果支持分块复制（标题 / 核心优势 / 描述 / 关键词），可直接粘贴到卖家后台。</li>
+  <li><strong>API Key 安全：</strong>DeepSeek API Key 仅保存在服务端环境变量，前端通过本地代理调用，不会暴露在网页代码中。</li>
+  <li><strong>开箱即用：</strong>双击 start.bat 即可启动，配置简单（仅需在 .env 中填写 API Key）。</li>
+  <li><strong>Powered by DeepSeek：</strong>采用 DeepSeek 大模型，生成质量高、响应稳定。</li>
+</ul>
+</div>
+
+<h2>二、环境要求</h2>
+<ul>
+  <li>操作系统：Windows 10 / 11（推荐）</li>
+  <li>Node.js：LTS 版本（需已安装并加入系统 PATH）</li>
+  <li>浏览器：Chrome、Edge 等现代浏览器</li>
+  <li>网络：需能访问 DeepSeek API（api.deepseek.com）</li>
+  <li>DeepSeek API Key：在 DeepSeek 开放平台申请</li>
+</ul>
+
+<h2>三、安装与启动</h2>
+
+<h3>3.1 首次使用步骤</h3>
+<ol>
+  <li>进入项目文件夹：<code>cross-border-listing-generator</code></li>
+  <li>复制 <code>.env.example</code> 为 <code>.env</code>，填入您的 <code>DEEPSEEK_API_KEY</code></li>
+  <li>双击运行 <code>start.bat</code>（首次会自动安装依赖，请稍候）</li>
+  <li>浏览器自动打开 <code>http://127.0.0.1:5173</code></li>
+  <li>页面顶部状态条显示绿色「服务器已连接」即可使用</li>
+</ol>
+
+<h3>3.2 重要提醒</h3>
+<ul>
+  <li><strong>请勿直接双击 index.html</strong> 打开页面，必须通过 start.bat 或 npm start 启动服务器</li>
+  <li>运行期间请<strong>保持黑色命令行窗口不要关闭</strong>，关闭后网页将无法生成 Listing</li>
+  <li>若端口 5173 被占用，可先执行 <code>taskkill /F /IM node.exe</code> 后重新启动</li>
+</ul>
+
+<h2>四、功能说明</h2>
+
+<h3>4.1 产品信息填写</h3>
+<table>
+  <tr><th>字段</th><th>说明</th></tr>
+  <tr><td>产品名称</td><td>输入商品名称，如「不锈钢厨房剪刀」</td></tr>
+  <tr><td>产品卖点 / 特点</td><td>填写核心卖点，可多行，越详细生成效果越好</td></tr>
+  <tr><td>产品类型</td><td>如「厨房用品」「宠物用品」，用于优化 SEO 关键词</td></tr>
+  <tr><td>文案风格</td><td>专业正式 / 活泼口语化，二选一</td></tr>
+</table>
+
+<h3>4.2 历史记录（本地存储）</h3>
+<p>这是本工具的重要便利功能，请务必了解以下说明：</p>
+<ul>
+  <li>每次<strong>成功生成 Listing 后</strong>，系统自动保存产品名称、卖点、产品类型</li>
+  <li>在「产品名称」或「产品类型」输入框中，会出现历史下拉建议，选中后<strong>自动填充全部字段</strong></li>
+  <li>产品类型下方显示历史标签（如「产品名 · 类型」），<strong>点击即可一键填充</strong></li>
+  <li>数据<strong>仅保存在您当前电脑的当前浏览器中</strong>（localStorage）</li>
+  <li><strong>不会上传到服务器</strong>，其他电脑、其他浏览器无法看到您的历史</li>
+  <li>清除浏览器缓存、更换浏览器、重装系统后，历史记录会<strong>丢失</strong></li>
+  <li>最多保存最近 <strong>30 条</strong>记录</li>
+</ul>
+
+<h3>4.3 产品语言选择</h3>
+<ul>
+  <li>支持 <strong>36 种语言</strong>，按大洲分类：全部 / 亚洲 / 欧洲 / 非洲 / 美洲</li>
+  <li>点击某个大洲后，<strong>只显示该大洲语言</strong>，其他大洲语言隐藏</li>
+  <li>默认<strong>不自动勾选</strong>，请手动勾选需要的语言</li>
+  <li>点击「全部」显示所有语言，同样默认不勾选</li>
+  <li>可跨大洲勾选：先在「欧洲」勾选德语、法语，再切到「亚洲」勾选日语，生成时包含所有已勾选语言</li>
+</ul>
+
+<h3>4.4 生成结果说明</h3>
+<table>
+  <tr><th>结果项</th><th>说明</th></tr>
+  <tr><td>标题</td><td>150–200 字符，含 SEO 关键词</td></tr>
+  <tr><td>核心优势</td><td>5 条 Bullet Points，每条不超过 500 字符</td></tr>
+  <tr><td>产品描述</td><td>200–300 词（日语等按字符计）</td></tr>
+  <tr><td>关键词</td><td>250 字符内，逗号分隔</td></tr>
+</table>
+<p>多语言结果以标签页切换，每块内容均有「一键复制」按钮。</p>
+
+<h2>五、标准使用流程</h2>
+<ol>
+  <li>双击 <code>start.bat</code> 启动服务</li>
+  <li>浏览器打开 <code>http://127.0.0.1:5173</code></li>
+  <li>填写产品名称、卖点、产品类型（或从历史记录中选择）</li>
+  <li>选择大洲，勾选需要的产品语言</li>
+  <li>选择文案风格</li>
+  <li>点击「生成 Listing」，等待完成（语言越多耗时越长）</li>
+  <li>在结果区切换语言标签，复制内容到卖家后台</li>
+</ol>
+
+<h2>六、在线部署（可选）</h2>
+<p>若需部署到 Vercel 供团队在线使用：</p>
+<ol>
+  <li>将项目推送到 GitHub</li>
+  <li>在 Vercel 导入仓库</li>
+  <li>在 Environment Variables 中添加 <code>DEEPSEEK_API_KEY</code></li>
+  <li>部署完成后通过 Vercel 域名访问</li>
+</ol>
+<p><strong>注意：</strong>在线版的历史记录同样只保存在用户浏览器本地，与部署服务器无关。</p>
+
+<h2>七、常见问题</h2>
+
+<p class="faq-q">Q：网页打不开？</p>
+<p class="faq-a">A：请确认已通过 start.bat 启动，并访问 http://127.0.0.1:5173，不要直接打开 HTML 文件。</p>
+
+<p class="faq-q">Q：Failed to fetch？</p>
+<p class="faq-a">A：服务器未运行或命令行窗口已关闭，请重新运行 start.bat。</p>
+
+<p class="faq-q">Q：生成超时？</p>
+<p class="faq-a">A：勾选语言过多时请耐心等待，或减少语言数量后重试。多种语言约需数分钟。</p>
+
+<p class="faq-q">Q：历史记录不见了？</p>
+<p class="faq-a">A：历史存在浏览器本地，清除缓存或换浏览器后会丢失，属正常现象。</p>
+
+<p class="faq-q">Q：API Key 会泄露吗？</p>
+<p class="faq-a">A：Key 仅配置在 .env 或 Vercel 环境变量中，不会出现在前端代码或网页源码里。</p>
+
+<p class="faq-q">Q：生成的内容可以直接上架吗？</p>
+<p class="faq-a">A：建议生成后人工审核，根据各平台规则微调后再上架。</p>
+
+<h2>八、安全与隐私说明</h2>
+<ul>
+  <li>产品信息会发送至 DeepSeek API 用于生成文案，请遵守 DeepSeek 服务条款</li>
+  <li>历史记录<strong>仅存储在本地浏览器</strong>，不上传、不同步、不共享</li>
+  <li>请勿将 .env 文件或 API Key 提交到 Git 或分享给他人</li>
+  <li>若 API Key 曾泄露，请立即在 DeepSeek 平台撤销并重新生成</li>
+</ul>
+
+<p class="footer">Powered by DeepSeek · 跨境 AI Listing 生成器</p>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "cross-border-listing-generator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:api": "node test-api.mjs"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}
