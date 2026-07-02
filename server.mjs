@@ -1,8 +1,9 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { fileURLToPath } from "url";
-import { handleGenerateRequest } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice } from "./api/generate-handler.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -77,6 +78,34 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (url.startsWith("/api/usage")) {
+    const query = new URL(req.url, "http://localhost").searchParams;
+    const deviceId = query.get("deviceId");
+    if (!deviceId) {
+      sendJson(res, 400, { error: "缺少 deviceId" });
+      return;
+    }
+    sendJson(res, 200, getUsageStatus(deviceId, env));
+    return;
+  }
+
+  if (url === "/api/activate" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      const result = activateDevice(payload.deviceId, payload.code, env);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || "激活失败" });
+    }
+    return;
+  }
+
+  if (url === "/api/activate") {
+    sendJson(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
   if (url === "/api/generate" && req.method === "POST") {
     try {
       const body = await readBody(req);
@@ -96,10 +125,12 @@ async function handleRequest(req, res) {
     return;
   }
 
-  const filePath =
-    url === "/" || url === "/index.html"
-      ? path.join(__dirname, "index.html")
-      : path.join(__dirname, url);
+  const filePath = resolveFilePath(url);
+  if (!filePath) {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("Not Found");
+    return;
+  }
 
   const normalizedRoot = path.resolve(__dirname);
   const normalizedFile = path.resolve(filePath);
@@ -123,11 +154,35 @@ async function handleRequest(req, res) {
       ".css": "text/css; charset=utf-8",
       ".js": "application/javascript; charset=utf-8",
       ".json": "application/json; charset=utf-8",
+      ".webmanifest": "application/manifest+json; charset=utf-8",
+      ".svg": "image/svg+xml; charset=utf-8",
     };
 
     res.writeHead(200, { "Content-Type": types[ext] || "text/plain; charset=utf-8" });
     res.end(data);
   });
+}
+
+function resolveFilePath(url) {
+  if (url === "/" || url === "/index.html") {
+    return path.join(__dirname, "index.html");
+  }
+  if (url === "/mobile" || url === "/mobile/") {
+    return path.join(__dirname, "mobile", "index.html");
+  }
+  const relative = url.replace(/^\//, "").replace(/\//g, path.sep);
+  if (!relative) return null;
+  return path.join(__dirname, relative);
+}
+
+function getLocalIp() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name] || []) {
+      if (net.family === "IPv4" && !net.internal) return net.address;
+    }
+  }
+  return null;
 }
 
 const server = http.createServer((req, res) => {
@@ -140,11 +195,19 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  const ip = getLocalIp();
   console.log("");
   console.log("========================================");
   console.log("  跨境 AI Listing 生成器 已启动");
-  console.log(`  浏览器打开: http://127.0.0.1:${PORT}`);
-  console.log(`  或访问:     http://localhost:${PORT}`);
+  console.log("");
+  console.log("  电脑网页版:");
+  console.log(`    http://127.0.0.1:${PORT}`);
+  console.log("");
+  console.log("  手机 APP 版:");
+  console.log(`    http://127.0.0.1:${PORT}/mobile/`);
+  if (ip) {
+    console.log(`    http://${ip}:${PORT}/mobile/  （手机连同一 WiFi 访问）`);
+  }
   if (!env.DEEPSEEK_API_KEY) {
     console.log("");
     console.log("  [警告] 未检测到 DEEPSEEK_API_KEY");

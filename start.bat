@@ -29,7 +29,9 @@ if not exist .env (
 echo 正在启动服务器...
 echo.
 echo 重要: 不要直接双击 index.html
-echo 浏览器将打开: http://127.0.0.1:5173
+echo 电脑网页版: http://127.0.0.1:5173
+echo 手机 APP 版: http://127.0.0.1:5173/mobile/
+echo 手机请连同一 WiFi，看命令行里的局域网地址
 echo 按 Ctrl+C 可停止
 echo.
 

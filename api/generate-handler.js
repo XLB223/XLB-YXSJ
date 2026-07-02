@@ -1,4 +1,12 @@
 import { SUPPORTED_LANGUAGES } from "../languages.js";
+import {
+  assertCanGenerate,
+  recordGeneration,
+  getUsageStatus,
+  activateDevice,
+} from "./usage-store.js";
+
+export { getUsageStatus, activateDevice };
 
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
 const BATCH_SIZE = 4;
@@ -159,9 +167,21 @@ async function callDeepSeek(apiKey, prompt, timeoutMs) {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      const error = new Error(
-        `DeepSeek API 请求失败 (${response.status}): ${errorBody || response.statusText}`
-      );
+      let message = `DeepSeek API 请求失败 (${response.status})`;
+
+      if (response.status === 401) {
+        message =
+          "DeepSeek API Key 无效或已过期。请登录 platform.deepseek.com 检查余额并重新生成 Key，更新 .env 文件中的 DEEPSEEK_API_KEY 后重启 start.bat";
+      } else {
+        try {
+          const parsed = JSON.parse(errorBody);
+          message = parsed?.error?.message || message;
+        } catch {
+          if (errorBody) message += `: ${errorBody}`;
+        }
+      }
+
+      const error = new Error(message);
       error.status = response.status;
       throw error;
     }
@@ -196,7 +216,7 @@ export async function handleGenerateRequest(payload, env = process.env) {
     throw error;
   }
 
-  const { productName, sellingPoints, category, style, languages: rawLanguages } =
+  const { productName, sellingPoints, category, style, languages: rawLanguages, deviceId } =
     payload || {};
 
   if (!productName?.trim() || !sellingPoints?.trim() || !category?.trim()) {
@@ -204,6 +224,8 @@ export async function handleGenerateRequest(payload, env = process.env) {
     error.status = 400;
     throw error;
   }
+
+  assertCanGenerate(deviceId, env);
 
   const languages = normalizeLanguages(rawLanguages);
   const batches = chunkArray(languages, BATCH_SIZE);
@@ -227,5 +249,12 @@ export async function handleGenerateRequest(payload, env = process.env) {
     Object.assign(allListings, batchResult);
   }
 
-  return { listings: allListings, total: languages.length, batches: batches.length };
+  const usage = recordGeneration(deviceId, env);
+
+  return {
+    listings: allListings,
+    total: languages.length,
+    batches: batches.length,
+    usage,
+  };
 }

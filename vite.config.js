@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
-import { handleGenerateRequest } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice } from "./api/generate-handler.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
 export default defineConfig(({ mode }) => {
@@ -37,6 +37,53 @@ export default defineConfig(({ mode }) => {
               res.statusCode = 200;
               res.setHeader("Content-Type", "application/json; charset=utf-8");
               res.end(JSON.stringify({ languages: SUPPORTED_LANGUAGES }));
+              return;
+            }
+
+            if (url === "/api/usage") {
+              const query = new URL(req.url, "http://localhost").searchParams;
+              const deviceId = query.get("deviceId");
+              res.statusCode = deviceId ? 200 : 400;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(
+                JSON.stringify(
+                  deviceId
+                    ? getUsageStatus(deviceId, env)
+                    : { error: "缺少 deviceId" }
+                )
+              );
+              return;
+            }
+
+            if (url === "/api/activate") {
+              if (req.method === "OPTIONS") {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
+              if (req.method !== "POST") {
+                res.statusCode = 405;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              let body = "";
+              req.on("data", (chunk) => {
+                body += chunk;
+              });
+              req.on("end", () => {
+                try {
+                  const payload = body ? JSON.parse(body) : {};
+                  const result = activateDevice(payload.deviceId, payload.code, env);
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify(result));
+                } catch (error) {
+                  res.statusCode = error.status || 500;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ error: error.message || "激活失败" }));
+                }
+              });
               return;
             }
 

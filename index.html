@@ -56,6 +56,35 @@
       font-size: 0.95rem;
     }
 
+    .version-links {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .version-link {
+      padding: 6px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .version-link:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .version-link.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
     .card {
       background: var(--card);
       border-radius: var(--radius);
@@ -446,6 +475,108 @@
       border: 1px solid #fde68a;
     }
 
+    .plan-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .plan-bar.pro {
+      border-color: #bfdbfe;
+      background: linear-gradient(90deg, #eff6ff, #fff);
+    }
+
+    .plan-text {
+      font-size: 0.88rem;
+      color: var(--text);
+    }
+
+    .plan-text.pro-label {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .btn-activate {
+      flex-shrink: 0;
+      padding: 7px 14px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-activate.hidden { display: none; }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.visible { display: flex; }
+
+    .modal {
+      width: 100%;
+      max-width: 400px;
+      background: #fff;
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+    }
+
+    .modal h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .modal p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .modal-actions button {
+      flex: 1;
+      padding: 11px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+
+    .btn-modal-cancel {
+      background: #fff;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-modal-submit {
+      background: var(--primary);
+      border: none;
+      color: #fff;
+      font-weight: 600;
+    }
+
     @media (max-width: 600px) {
       .page {
         padding: 24px 16px 40px;
@@ -464,30 +595,6 @@
         align-self: flex-end;
       }
     }
-
-    /* ?????? */
-    .upgrade-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:999; justify-content:center; align-items:center; }
-    .upgrade-overlay.show { display:flex; }
-    .upgrade-modal { background:#fff; border-radius:16px; padding:32px; max-width:420px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); position:relative; }
-    .upgrade-modal h3 { margin:0 0 8px; font-size:22px; color:#1a1a2e; }
-    .upgrade-modal .upgrade-icon { font-size:48px; margin-bottom:12px; }
-    .upgrade-modal p { color:#666; margin:8px 0 20px; line-height:1.6; }
-    .upgrade-modal .upgrade-plan { background:#f0f4ff; border-radius:12px; padding:16px; margin:16px 0; }
-    .upgrade-modal .upgrade-price { font-size:28px; font-weight:700; color:#4f46e5; }
-    .upgrade-modal .upgrade-price span { font-size:14px; color:#888; font-weight:400; }
-    .upgrade-modal .btn-upgrade { display:block; width:100%; padding:14px; background:linear-gradient(135deg,#4f46e5,#7c3aed); color:#fff; border:none; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; margin:8px 0; }
-    .upgrade-modal .btn-upgrade:hover { opacity:0.9; }
-    .upgrade-modal .btn-activate { display:block; width:100%; padding:12px; background:transparent; color:#4f46e5; border:2px solid #4f46e5; border-radius:10px; font-size:14px; font-weight:500; cursor:pointer; margin:4px 0; }
-    .upgrade-modal .activate-section { display:none; margin-top:16px; }
-    .upgrade-modal .activate-section.show { display:block; }
-    .upgrade-modal .activate-input { width:100%; padding:12px; border:2px solid #e0e0e0; border-radius:10px; font-size:15px; text-align:center; margin:8px 0; box-sizing:border-box; }
-    .upgrade-modal .activate-input:focus { border-color:#4f46e5; outline:none; }
-    .upgrade-modal .btn-submit-activate { width:100%; padding:12px; background:#22c55e; color:#fff; border:none; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer; }
-    .upgrade-modal .btn-close-modal { position:absolute; top:12px; right:16px; background:none; border:none; font-size:24px; cursor:pointer; color:#999; }
-    .upgrade-modal .activate-error { color:#ef4444; font-size:13px; margin-top:8px; display:none; }
-    .pro-badge { display:none; background:linear-gradient(135deg,#f59e0b,#ef4444); color:#fff; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; margin-left:8px; vertical-align:middle; }
-    .usage-info { text-align:center; font-size:13px; color:#888; margin:8px 0; }
-    .usage-info .remaining { font-weight:700; color:#4f46e5; }
   </style>
 </head>
 <body>
@@ -495,11 +602,25 @@
     <header class="header">
       <h1>跨境AI Listing生成器</h1>
       <p>输入产品信息，一键生成 Amazon 多语言 Listing</p>
-        <span class="pro-badge" id="proBadge">PRO</span>
+      <div class="version-links">
+        <a href="/" class="version-link active">网页版</a>
+        <a href="/mobile/" class="version-link">手机版</a>
+      </div>
     </header>
 
     <div class="status-bar" id="statusBar"></div>
-    <div class="usage-info" id="usageInfo">?????<span class="remaining" id="remainingCount">3</span> ?</div>
+
+    <div class="modal-overlay" id="activateModal">
+      <div class="modal">
+        <h3>激活 Pro 版</h3>
+        <p>免费版每天限 3 次生成。输入激活码解锁无限次使用。</p>
+        <input type="text" id="activationCodeInput" placeholder="请输入激活码" />
+        <div class="modal-actions">
+          <button type="button" class="btn-modal-cancel" id="activateCancelBtn">取消</button>
+          <button type="button" class="btn-modal-submit" id="activateSubmitBtn">确认激活</button>
+        </div>
+      </div>
+    </div>
 
     <section class="card">
       <h2 class="card-title">产品信息</h2>
@@ -563,6 +684,11 @@
         </div>
 
         <button type="submit" class="btn-generate" id="generateBtn">生成 Listing</button>
+
+        <div class="plan-bar" id="planBar">
+          <span class="plan-text" id="usageText">加载额度中...</span>
+          <button type="button" class="btn-activate" id="activateBtn">激活 Pro</button>
+        </div>
       </form>
     </section>
 
@@ -575,42 +701,11 @@
     <footer class="footer">Powered by DeepSeek</footer>
   </div>
 
-  <div class="upgrade-overlay" id="upgradeOverlay">
-    <div class="upgrade-modal">
-      <button class="btn-close-modal" onclick="closeUpgradeModal()">&times;</button>
-      <div class="upgrade-icon">&#x1f680;</div>
-      <h3>?????????</h3>
-      <p>???? <b>3</b> ???? Pro ????</p>
-      <div class="upgrade-plan">
-        <div class="upgrade-price">&yen;19.9<span>/?</span></div>
-        <div style="color:#888;font-size:13px;">? &yen;99/? &middot; ???? &middot; ???</div>
-      </div>
-      <button class="btn-upgrade" onclick="goPay()">&#x1f4b3; ???? Pro</button>
-      <button class="btn-activate" onclick="showActivateInput()">??????????</button>
-      <div class="activate-section" id="activateSection">
-        <input class="activate-input" id="activateCodeInput" placeholder="??????" />
-        <button class="btn-submit-activate" onclick="activatePro()">&#x2714; ?? Pro</button>
-        <div class="activate-error" id="activateError">????????????</div>
-      </div>
-    </div>
-  </div>
-
   <script>
-
     let LANG_META = {};
     let selectedLangs = new Set();
     let activeRegion = "全部";
     const regionSelections = {};
-
-    const DAILY_LIMIT = 3;
-    const USAGE_KEY = "listing_usage";
-    const PRO_KEY = "listing_pro";
-    const ACTIVATION_CODES = ["PRO2026", "XLBVIP", "LISTING99"];
-    function getToday() { return new Date().toISOString().slice(0,10); }
-    function getUsage() { try { const d=JSON.parse(localStorage.getItem(USAGE_KEY)); if(d&&d.date===getToday()) return d.count; }catch(e){} return 0; }
-    function addUsage() { const today=getToday(); let d={date:today,count:1}; try{const e=JSON.parse(localStorage.getItem(USAGE_KEY));if(e&&e.date===today)d.count=e.count+1;}catch(e){} localStorage.setItem(USAGE_KEY,JSON.stringify(d)); updateUsageUI(); }
-    function isPro() { try{return localStorage.getItem(PRO_KEY)==="true";}catch(e){return false;} }
-    function canGenerate() { return isPro() || getUsage() < DAILY_LIMIT; }
 
     const form = document.getElementById("listingForm");
     const generateBtn = document.getElementById("generateBtn");
@@ -630,7 +725,83 @@
         : "";
 
     const HISTORY_KEY = "listingProductHistory";
+    const DEVICE_KEY = "listingDeviceId";
     const MAX_HISTORY = 30;
+
+    function getDeviceId() {
+      let id = localStorage.getItem(DEVICE_KEY);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(DEVICE_KEY, id);
+      }
+      return id;
+    }
+
+    const deviceId = getDeviceId();
+    const planBar = document.getElementById("planBar");
+    const usageText = document.getElementById("usageText");
+    const activateBtn = document.getElementById("activateBtn");
+    const activateModal = document.getElementById("activateModal");
+    const activationCodeInput = document.getElementById("activationCodeInput");
+
+    async function refreshUsage() {
+      try {
+        const response = await fetch(`${API_BASE}/api/usage?deviceId=${encodeURIComponent(deviceId)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        usageText.textContent = data.message;
+        if (data.isPro) {
+          planBar.classList.add("pro");
+          usageText.classList.add("pro-label");
+          activateBtn.classList.add("hidden");
+        } else {
+          planBar.classList.remove("pro");
+          usageText.classList.remove("pro-label");
+          activateBtn.classList.remove("hidden");
+        }
+      } catch {
+        usageText.textContent = "免费版 · 每日 3 次";
+      }
+    }
+
+    activateBtn.addEventListener("click", () => {
+      activationCodeInput.value = "";
+      activateModal.classList.add("visible");
+      activationCodeInput.focus();
+    });
+
+    document.getElementById("activateCancelBtn").addEventListener("click", () => {
+      activateModal.classList.remove("visible");
+    });
+
+    document.getElementById("activateSubmitBtn").addEventListener("click", async () => {
+      const code = activationCodeInput.value.trim();
+      if (!code) {
+        alert("请输入激活码");
+        return;
+      }
+      try {
+        const response = await fetch(`${API_BASE}/api/activate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, code }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "激活失败");
+        activateModal.classList.remove("visible");
+        alert(data.message || "Pro 激活成功");
+        refreshUsage();
+      } catch (error) {
+        alert(error.message || "激活失败");
+      }
+    });
+
+    activateModal.addEventListener("click", (e) => {
+      if (e.target === activateModal) activateModal.classList.remove("visible");
+    });
+
+    refreshUsage();
 
     const productNameInput = document.getElementById("productName");
     const sellingPointsInput = document.getElementById("sellingPoints");
@@ -938,11 +1109,6 @@
         return;
       }
 
-      if (!canGenerate()) {
-        showUpgradeModal();
-        return;
-      }
-
       generateBtn.disabled = true;
       generateBtn.textContent = `生成中（${languages.length} 种语言，约 ${Math.ceil(languages.length / 4)} 批）...`;
 
@@ -954,7 +1120,7 @@
         const response = await fetch(`${API_BASE}/api/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productName, sellingPoints, category, style, languages }),
+          body: JSON.stringify({ productName, sellingPoints, category, style, languages, deviceId }),
           signal: controller.signal,
         });
 
@@ -972,8 +1138,17 @@
         }
 
         currentListings = data.listings || data;
-        addUsage();
         saveProductHistory({ productName, sellingPoints, category });
+        if (data.usage) {
+          usageText.textContent = data.usage.message;
+          if (data.usage.isPro) {
+            planBar.classList.add("pro");
+            usageText.classList.add("pro-label");
+            activateBtn.classList.add("hidden");
+          }
+        } else {
+          refreshUsage();
+        }
         renderResults(currentListings, languages);
         resultsSection.classList.add("visible");
         resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -992,6 +1167,10 @@
         } else {
           alert(error.message || "生成失败，请稍后重试");
           showStatus(error.message || "生成失败", "error");
+          if (error.message?.includes("激活码")) {
+            activateModal.classList.add("visible");
+          }
+          refreshUsage();
         }
       } finally {
         generateBtn.disabled = false;
@@ -1125,24 +1304,6 @@
         alert("复制失败，请手动选择文本复制");
       }
     }
-    function getRemaining() { return isPro() ? "∞" : Math.max(0, DAILY_LIMIT - getUsage()); }
-    function updateUsageUI() {
-      document.getElementById("remainingCount").textContent = getRemaining();
-      if (isPro()) {
-        document.getElementById("usageInfo").style.display = "none";
-        document.getElementById("proBadge").style.display = "inline-block";
-      } else {
-        document.getElementById("usageInfo").style.display = "block";
-        document.getElementById("proBadge").style.display = "none";
-      }
-    }
-    function showUpgradeModal() { document.getElementById("upgradeOverlay").classList.add("show"); }
-    function closeUpgradeModal() { document.getElementById("upgradeOverlay").classList.remove("show"); document.getElementById("activateSection").classList.remove("show"); document.getElementById("activateError").style.display="none"; }
-    function showActivateInput() { document.getElementById("activateSection").classList.add("show"); }
-    function goPay() { alert("请联系客服获取付费链接（微信：xlb_service）"); }
-    function activatePro() { const code=document.getElementById("activateCodeInput").value.trim().toUpperCase(); if(ACTIVATION_CODES.includes(code)){localStorage.setItem(PRO_KEY,"true");closeUpgradeModal();updateUsageUI();alert("激活成功！你现在是 Pro 用户，无限使用！");}else{document.getElementById("activateError").style.display="block";} }
-    updateUsageUI();
-
   </script>
 </body>
 </html>
