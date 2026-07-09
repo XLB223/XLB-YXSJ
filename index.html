@@ -291,8 +291,28 @@
     }
     .lang-item:has(input:checked) { border-color: var(--primary); background: var(--primary-light); }
     .lang-item input { width: 16px; height: 16px; accent-color: var(--primary); }
-    .style-row { display: flex; gap: 16px; }
-    .style-row label { display: flex; align-items: center; gap: 6px; font-size: .88rem; color: var(--text); margin: 0; }
+    .style-row {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      flex-wrap: nowrap;
+    }
+    .style-title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .style-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .88rem;
+      color: var(--text);
+      margin: 0;
+      white-space: nowrap;
+    }
     .status {
       display: none;
       padding: 10px 14px;
@@ -467,8 +487,8 @@
       </section>
 
       <section class="card">
-        <label>文案风格</label>
-        <div class="style-row" style="margin-top:10px">
+        <div class="style-row">
+          <span class="style-title">文案风格</span>
           <label><input type="radio" name="style" value="professional" checked /> 专业正式</label>
           <label><input type="radio" name="style" value="casual" /> 活泼口语化</label>
         </div>
