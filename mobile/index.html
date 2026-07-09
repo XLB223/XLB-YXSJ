@@ -103,9 +103,64 @@
       border-radius: 14px;
       padding: 20px;
       color: var(--text);
+      max-height: 88vh;
+      overflow-y: auto;
     }
     .modal-box h3 { font-size: 1rem; margin-bottom: 8px; }
-    .modal-box p { font-size: .82rem; color: var(--muted); margin-bottom: 12px; }
+    .modal-sub { font-size: .78rem; color: var(--muted); margin-bottom: 12px; line-height: 1.45; }
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .pricing-card {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 6px;
+      text-align: center;
+      background: #fff;
+    }
+    .pricing-card.featured { border-color: #93c5fd; background: #eff6ff; }
+    .pricing-badge {
+      position: absolute;
+      top: -7px; right: 4px;
+      background: #f59e0b; color: #fff;
+      font-size: .58rem; padding: 1px 5px; border-radius: 999px;
+    }
+    .pricing-name { font-size: .68rem; color: var(--muted); }
+    .pricing-price { font-size: .95rem; font-weight: 700; color: var(--primary); }
+    .pricing-period { font-size: .62rem; color: var(--muted); }
+    .pricing-contact {
+      font-size: .76rem;
+      background: #f8fafc;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .payment-note { font-size: .72rem; color: var(--muted); text-align: center; margin-bottom: 8px; }
+    .payment-qr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .payment-qr-item {
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 6px 6px;
+      background: #fff;
+    }
+    .payment-qr-item img {
+      width: 100%;
+      max-width: 120px;
+      height: auto;
+      border-radius: 6px;
+      display: block;
+      margin: 0 auto 4px;
+    }
+    .payment-qr-item span { font-size: .68rem; color: var(--muted); font-weight: 500; }
+    .payment-site { text-align: center; font-size: .72rem; color: var(--primary); margin-bottom: 10px; }
+    .activate-label { display: block; font-size: .78rem; font-weight: 500; margin-bottom: 6px; }
     .modal-box input {
       width: 100%;
       padding: 12px;
@@ -133,7 +188,7 @@
     }
     .card-title { font-size: .95rem; font-weight: 600; margin-bottom: 14px; }
     label { display: block; font-size: .82rem; font-weight: 500; margin-bottom: 6px; color: var(--muted); }
-    input, textarea {
+    input, textarea, select {
       width: 100%;
       padding: 12px;
       border: 1px solid var(--border);
@@ -142,12 +197,42 @@
       font-family: inherit;
       background: #fff;
     }
-    input:focus, textarea:focus {
+    input:focus, textarea:focus, select:focus {
       outline: none;
       border-color: var(--primary);
       box-shadow: 0 0 0 3px rgba(37,99,235,.12);
     }
     textarea { min-height: 96px; resize: vertical; }
+    .field-hint { display: block; margin-top: 4px; font-size: .72rem; color: var(--muted); }
+    .field-meta { margin-top: 6px; font-size: .72rem; color: var(--muted); line-height: 1.4; }
+    .results-actions { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+    .btn-export {
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      font-size: .78rem;
+      color: var(--text);
+    }
+    .compliance-box {
+      margin-bottom: 12px;
+      padding: 10px;
+      border-radius: 10px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      font-size: .75rem;
+      color: #92400e;
+    }
+    .compliance-box.ok { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+    .compliance-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .compliance-tag {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #fef2f2;
+      color: #b91c1c;
+      font-size: .68rem;
+    }
+    mark.risk-word { background: #fecaca; padding: 0 2px; border-radius: 2px; }
     .field { margin-bottom: 14px; }
     .field:last-child { margin-bottom: 0; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -320,14 +405,38 @@
           <datalist id="nameList"></datalist>
         </div>
         <div class="field">
+          <label for="brandName">品牌名（选填）</label>
+          <input id="brandName" placeholder="例如：KitchenPro" />
+        </div>
+        <div class="field">
           <label for="sellingPoints">产品卖点 / 特点</label>
           <textarea id="sellingPoints" placeholder="核心卖点，越详细越好" required></textarea>
+          <span class="field-hint">只填真实卖点，AI 不会编造未提供的功能</span>
+        </div>
+        <div class="field">
+          <label for="coreKeywords">核心关键词 / 长尾词（选填）</label>
+          <textarea id="coreKeywords" rows="2" placeholder="逗号或换行分隔，如 kitchen scissors"></textarea>
+          <span class="field-hint">你调研好的搜索词；留空则 AI 自动选词</span>
+        </div>
+        <div class="field">
+          <label for="competitorReference">竞品参考（选填）</label>
+          <textarea id="competitorReference" rows="3" placeholder="粘贴 Amazon 竞品标题/五点"></textarea>
+          <span class="field-hint">学习竞品写法，不会抄袭；留空也能生成</span>
         </div>
         <div class="field">
           <label for="category">产品类型</label>
           <input id="category" list="catList" placeholder="例如：厨房用品" required />
           <datalist id="catList"></datalist>
           <div class="chips" id="historyChips"></div>
+        </div>
+        <div class="field">
+          <label for="categoryType">Amazon 类目规则</label>
+          <select id="categoryType">
+            <option value="general">通用类目（标题 ≤200 字符）</option>
+            <option value="apparel">服装/时尚（标题 ≤125 字符）</option>
+            <option value="electronics">电子产品（标题 ≤150 字符）</option>
+            <option value="baby_pet">母婴/宠物（标题 ≤80 字符）</option>
+          </select>
         </div>
       </section>
 
@@ -353,6 +462,9 @@
     </form>
 
     <section class="card results" id="results" style="display:none">
+      <div class="results-actions">
+        <button type="button" class="btn-export" id="exportWordBtn">导出 Word</button>
+      </div>
       <div class="card-title">生成结果</div>
       <div class="tabs-scroll" id="langTabs"></div>
       <div id="langPanels"></div>
@@ -364,15 +476,30 @@
     <button type="button" class="btn-generate" id="generateBtn">生成 Listing</button>
     <div class="plan-row" id="planBar">
       <span id="usageText">加载额度中...</span>
-      <button type="button" class="btn-pro" id="activateBtn">激活 Pro</button>
+      <button type="button" class="btn-pro" id="activateBtn">开通会员</button>
     </div>
   </div>
   <div class="toast" id="toast"></div>
 
   <div class="modal-overlay" id="activateModal">
     <div class="modal-box">
-      <h3>激活 Pro 版</h3>
-      <p>免费版每天限 3 次。输入激活码解锁无限次生成。</p>
+      <h3>开通会员</h3>
+      <p class="modal-sub" id="pricingTrialNote">免费试用每天 3 次，试用结束后可开通会员。</p>
+      <div class="pricing-grid" id="pricingGrid"></div>
+      <p class="payment-note" id="paymentNote">微信 / 支付宝扫码支付对应套餐金额</p>
+      <div class="payment-qr-row">
+        <div class="payment-qr-item">
+          <img id="wechatPayQr" src="/assets/payment/wechat-pay.png" alt="微信收款码" />
+          <span>微信支付</span>
+        </div>
+        <div class="payment-qr-item">
+          <img id="alipayPayQr" src="/assets/payment/alipay-pay.png" alt="支付宝收款码" />
+          <span>支付宝</span>
+        </div>
+      </div>
+      <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
+      <p class="pricing-contact" id="pricingContact">付款后联系客服获取激活码</p>
+      <label class="activate-label" for="activationCodeInput">已有激活码</label>
       <input type="text" id="activationCodeInput" placeholder="请输入激活码" />
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
@@ -403,6 +530,8 @@
     let activeRegion = "全部";
     const regionSelections = {};
     let currentListings = null;
+    let currentCompliance = null;
+    let currentLanguages = [];
 
     const els = {
       form: document.getElementById("form"),
@@ -432,6 +561,49 @@
       setTimeout(() => els.toast.classList.remove("show"), 2000);
     }
 
+    let purchaseInfo = null;
+
+    async function loadPurchaseInfo() {
+      try {
+        const r = await fetch(`${API}/api/pricing`);
+        const d = await r.json();
+        if (r.ok) purchaseInfo = d;
+      } catch {
+        purchaseInfo = null;
+      }
+      renderPricingCards();
+    }
+
+    function renderPricingCards() {
+      const grid = document.getElementById("pricingGrid");
+      const contactEl = document.getElementById("pricingContact");
+      const noteEl = document.getElementById("pricingTrialNote");
+      const paymentNoteEl = document.getElementById("paymentNote");
+      const paymentSiteEl = document.getElementById("paymentSite");
+      const wechatQrEl = document.getElementById("wechatPayQr");
+      const alipayQrEl = document.getElementById("alipayPayQr");
+      const plans = purchaseInfo?.plans || [
+        { id: "month", name: "月卡", priceLabel: "¥29.9", period: "1 个月" },
+        { id: "half", name: "半年卡", priceLabel: "¥69.9", period: "6 个月", badge: "划算" },
+        { id: "year", name: "年卡", priceLabel: "¥129.9", period: "1 年", badge: "最省" },
+      ];
+      grid.innerHTML = plans.map((p) => `
+        <div class="pricing-card${p.id === "half" ? " featured" : ""}">
+          ${p.badge ? `<span class="pricing-badge">${p.badge}</span>` : ""}
+          <div class="pricing-name">${p.name}</div>
+          <div class="pricing-price">${p.priceLabel}</div>
+          <div class="pricing-period">${p.period}</div>
+        </div>`).join("");
+      if (purchaseInfo?.trialNote) noteEl.textContent = purchaseInfo.trialNote;
+      if (purchaseInfo?.payment?.note) paymentNoteEl.textContent = purchaseInfo.payment.note;
+      if (purchaseInfo?.siteUrl) paymentSiteEl.textContent = purchaseInfo.siteUrl;
+      wechatQrEl.src = purchaseInfo?.payment?.wechatQr || "/assets/payment/wechat-pay.png";
+      alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
+      contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "付款后联系客服获取激活码"}</strong>`;
+    }
+
+    loadPurchaseInfo();
+
     async function refreshUsage() {
       try {
         const r = await fetch(`${API}/api/usage?deviceId=${encodeURIComponent(deviceId)}`);
@@ -440,11 +612,12 @@
         els.usageText.textContent = d.message;
         els.activateBtn.classList.toggle("hidden", d.isPro);
       } catch {
-        els.usageText.textContent = "免费版 · 每日 3 次";
+        els.usageText.textContent = "免费试用 · 每日 3 次";
       }
     }
 
     els.activateBtn.onclick = () => {
+      renderPricingCards();
       els.activationCodeInput.value = "";
       els.activateModal.classList.add("show");
       els.activationCodeInput.focus();
@@ -462,7 +635,7 @@
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
         els.activateModal.classList.remove("show");
-        toast(d.message || "Pro 激活成功");
+        toast(d.message || "会员激活成功");
         refreshUsage();
       } catch (e) {
         alert(e.message || "激活失败");
@@ -652,10 +825,92 @@
         .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
     }
 
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    const COMPLIANCE_RULES = [
+      { pattern: /\b(best|#1|no\.?\s*1|number\s*one|top[\s-]?rated|perfect|flawless)\b/gi, tip: "避免最高级/排名用语" },
+      { pattern: /\b(free|giveaway|discount|on sale|limited time|buy one get one)\b/gi, tip: "避免促销用语" },
+      {
+        pattern:
+          /\b(cure|cures|treat|treats|heal|heals|therapy|therapeutic|anti-?bacterial|anti-?microbial|fda|disease|diagnose|medical grade)\b/gi,
+        tip: "避免医疗/功效宣称",
+      },
+      { pattern: /\b100\s*%|guaranteed\s+results?\b/gi, tip: "避免绝对化承诺" },
+    ];
+
+    function highlightComplianceHtml(text) {
+      let html = escapeHtml(text || "");
+      COMPLIANCE_RULES.forEach((rule) => {
+        html = html.replace(rule.pattern, (match) => `<mark class="risk-word" title="${rule.tip}">${match}</mark>`);
+      });
+      return html;
+    }
+
+    function renderComplianceBox(warnings) {
+      if (!warnings || !warnings.length) {
+        return `<div class="compliance-box ok">合规检查：未发现常见敏感词</div>`;
+      }
+      const tags = warnings
+        .map((item) => `<span class="compliance-tag" title="${escapeHtml(item.tip)}">${escapeHtml(item.word)}</span>`)
+        .join("");
+      return `<div class="compliance-box">合规提示：发现 ${warnings.length} 处敏感词<div class="compliance-tags">${tags}</div></div>`;
+    }
+
+    function exportListingsWord() {
+      if (!currentListings || !currentLanguages.length) {
+        alert("暂无生成结果可导出");
+        return;
+      }
+      const date = new Date().toISOString().slice(0, 10);
+      const sections = currentLanguages.map((code) => {
+        const listing = currentListings[code];
+        if (!listing) return "";
+        const meta = LANG_META[code] || { name: code, marketplace: "" };
+        const bullets = listing.bulletPoints || [];
+        const warnings = (currentCompliance && currentCompliance[code]) || [];
+        const warnText = warnings.length
+          ? warnings.map((w) => `${escapeHtml(w.word)}（${escapeHtml(w.tip)}）`).join("；")
+          : "未发现常见敏感词";
+        const bulletHtml = bullets.map((p, i) => `<li><strong>${i + 1}.</strong> ${escapeHtml(p)}</li>`).join("");
+        const descHtml = sanitizeHtml(listing.description || "");
+        return `
+          <div style="page-break-before:always;margin-bottom:20px;">
+            <h2>${escapeHtml(meta.name)}（${escapeHtml(code)}）</h2>
+            <h3>标题</h3><p>${escapeHtml(listing.title || "")}</p>
+            <h3>核心优势</h3><ol>${bulletHtml}</ol>
+            <h3>产品描述</h3><div>${descHtml}</div>
+            <h3>后台关键词</h3><p>${escapeHtml(listing.searchTerms || "")}</p>
+            <h3>合规提示</h3><p>${warnText}</p>
+          </div>`;
+      }).join("");
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Listing ${date}</title></head><body>
+        <h1>Amazon 多语言 Listing</h1><p>导出日期：${date}</p>${sections}</body></html>`;
+      const blob = new Blob(["\ufeff", html], { type: "application/msword;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `listing-${date}.doc`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast("Word 已导出");
+    }
+
+    document.getElementById("exportWordBtn").onclick = exportListingsWord;
+
     els.generateBtn.onclick = async () => {
       const productName = els.productName.value.trim();
+      const brandName = document.getElementById("brandName").value.trim();
       const sellingPoints = els.sellingPoints.value.trim();
+      const coreKeywords = document.getElementById("coreKeywords").value.trim();
+      const competitorReference = document.getElementById("competitorReference").value.trim();
       const category = els.category.value.trim();
+      const categoryType = document.getElementById("categoryType").value;
       const style = document.querySelector('input[name="style"]:checked').value;
       const languages = getSelected();
 
@@ -671,7 +926,18 @@
         const r = await fetch(`${API}/api/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productName, sellingPoints, category, style, languages, deviceId }),
+          body: JSON.stringify({
+            productName,
+            brandName,
+            sellingPoints,
+            coreKeywords,
+            competitorReference,
+            category,
+            categoryType,
+            style,
+            languages,
+            deviceId,
+          }),
           signal: ctrl.signal,
         });
         clearTimeout(tid);
@@ -679,6 +945,8 @@
         if (!r.ok) throw new Error(data.error || "生成失败");
 
         currentListings = data.listings || data;
+        currentCompliance = data.compliance || {};
+        currentLanguages = languages;
         saveHistory({ productName, sellingPoints, category });
         if (data.usage) {
           els.usageText.textContent = data.usage.message;
@@ -686,14 +954,17 @@
         } else {
           refreshUsage();
         }
-        renderResults(currentListings, languages);
+        renderResults(currentListings, languages, currentCompliance);
         els.results.style.display = "block";
         els.results.scrollIntoView({ behavior: "smooth" });
       } catch (e) {
         if (e.name === "AbortError") alert("请求超时，请减少语言数量后重试");
         else {
           alert(e.message || "生成失败");
-          if (e.message?.includes("激活码")) els.activateModal.classList.add("show");
+          if (e.message?.includes("开通会员") || e.message?.includes("激活码")) {
+            renderPricingCards();
+            els.activateModal.classList.add("show");
+          }
           refreshUsage();
         }
       } finally {
@@ -707,13 +978,15 @@
       document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.dataset.lang === code));
     }
 
-    function renderResults(listings, languages) {
+    function renderResults(listings, languages, complianceMap = {}) {
       els.langTabs.innerHTML = "";
       els.langPanels.innerHTML = "";
       languages.forEach((code, i) => {
         const listing = listings[code];
         if (!listing) return;
         const m = LANG_META[code] || { name: code, flag: "🌐", marketplace: "" };
+        const warnings = complianceMap[code] || [];
+        const metaInfo = listing.meta || {};
 
         const tab = document.createElement("button");
         tab.type = "button";
@@ -728,9 +1001,11 @@
         panel.dataset.lang = code;
         panel.innerHTML = `
           <p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">${m.marketplace || ""}</p>
+          <div class="compliance-slot"></div>
           <div class="result-block">
             <div class="result-head"><span class="result-label">标题</span><button type="button" class="btn-copy" data-l="${code}" data-f="title">复制</button></div>
             <p class="result-title"></p>
+            <p class="field-meta title-meta"></p>
           </div>
           <div class="result-block">
             <div class="result-head"><span class="result-label">核心优势</span><button type="button" class="btn-copy" data-l="${code}" data-f="bullets">复制</button></div>
@@ -743,16 +1018,35 @@
           <div class="result-block">
             <div class="result-head"><span class="result-label">关键词</span><button type="button" class="btn-copy" data-l="${code}" data-f="searchTerms">复制</button></div>
             <p class="result-text terms"></p>
+            <p class="field-meta terms-meta"></p>
           </div>`;
-        panel.querySelector(".result-title").textContent = listing.title || "";
+
+        panel.querySelector(".compliance-slot").innerHTML = renderComplianceBox(warnings);
+        panel.querySelector(".result-title").innerHTML = highlightComplianceHtml(listing.title || "");
+
+        const mobilePreview = metaInfo.titleMobilePreview || (listing.title || "").slice(0, 80);
+        let titleMetaText = `移动端前 80 字符：${mobilePreview}${(listing.title || "").length > 80 ? "…" : ""}`;
+        if (metaInfo.titleMax) {
+          titleMetaText += ` · ${metaInfo.titleLength || (listing.title || "").length}/${metaInfo.titleMax} 字符`;
+        }
+        if (metaInfo.titleTruncated) titleMetaText += " · 已截断";
+        panel.querySelector(".title-meta").textContent = titleMetaText;
+
         const ul = panel.querySelector(".bullets");
         (listing.bulletPoints || []).forEach((p) => {
           const li = document.createElement("li");
-          li.textContent = p;
+          li.innerHTML = highlightComplianceHtml(p);
           ul.appendChild(li);
         });
         panel.querySelector(".desc").innerHTML = sanitizeHtml(listing.description || "");
-        panel.querySelector(".terms").textContent = listing.searchTerms || "";
+        panel.querySelector(".terms").innerHTML = highlightComplianceHtml(listing.searchTerms || "");
+
+        if (metaInfo.searchTermsBytes != null) {
+          let termsText = `后台关键词 ${metaInfo.searchTermsBytes}/249 字节`;
+          if (metaInfo.searchTermsTruncated) termsText += " · 已截断";
+          panel.querySelector(".terms-meta").textContent = termsText;
+        }
+
         panel.querySelectorAll(".btn-copy").forEach((btn) => {
           btn.onclick = async () => {
             const l = currentListings[btn.dataset.l];

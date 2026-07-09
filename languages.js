@@ -1,55 +1,15 @@
-export const CONTINENTS = ["亚洲", "欧洲", "非洲", "美洲"];
+﻿// Cloudflare Pages Function: /api/languages
+import { SUPPORTED_LANGUAGES } from "../../languages.js";
 
-export const SUPPORTED_LANGUAGES = {
-  en: { name: "英语", flag: "🇺🇸", marketplace: "Amazon US/CA/AU", continent: "美洲" },
-  de: { name: "德语", flag: "🇩🇪", marketplace: "Amazon DE", continent: "欧洲" },
-  fr: { name: "法语", flag: "🇫🇷", marketplace: "Amazon FR/BE", continent: "欧洲" },
-  es: { name: "西班牙语", flag: "🇪🇸", marketplace: "Amazon ES/MX", continent: "欧洲" },
-  it: { name: "意大利语", flag: "🇮🇹", marketplace: "Amazon IT", continent: "欧洲" },
-  pt: { name: "葡萄牙语", flag: "🇧🇷", marketplace: "Amazon BR", continent: "美洲" },
-  nl: { name: "荷兰语", flag: "🇳🇱", marketplace: "Amazon NL", continent: "欧洲" },
-  pl: { name: "波兰语", flag: "🇵🇱", marketplace: "Amazon PL", continent: "欧洲" },
-  sv: { name: "瑞典语", flag: "🇸🇪", marketplace: "Amazon SE", continent: "欧洲" },
-  tr: { name: "土耳其语", flag: "🇹🇷", marketplace: "Amazon TR", continent: "欧洲" },
-  cs: { name: "捷克语", flag: "🇨🇿", marketplace: "Amazon CZ", continent: "欧洲" },
-  ro: { name: "罗马尼亚语", flag: "🇷🇴", marketplace: "Amazon RO", continent: "欧洲" },
-  hu: { name: "匈牙利语", flag: "🇭🇺", marketplace: "Amazon HU", continent: "欧洲" },
-  da: { name: "丹麦语", flag: "🇩🇰", marketplace: "Amazon DK", continent: "欧洲" },
-  fi: { name: "芬兰语", flag: "🇫🇮", marketplace: "Amazon FI", continent: "欧洲" },
-  no: { name: "挪威语", flag: "🇳🇴", marketplace: "Amazon NO", continent: "欧洲" },
-  uk: { name: "乌克兰语", flag: "🇺🇦", marketplace: "Amazon UA", continent: "欧洲" },
-  ru: { name: "俄语", flag: "🇷🇺", marketplace: "Amazon RU", continent: "欧洲" },
-  ja: { name: "日语", flag: "🇯🇵", marketplace: "Amazon JP", continent: "亚洲" },
-  ko: { name: "韩语", flag: "🇰🇷", marketplace: "Coupang/Amazon", continent: "亚洲" },
-  zh: { name: "中文", flag: "🇨🇳", marketplace: "Amazon CN/港台", continent: "亚洲" },
-  hi: { name: "印地语", flag: "🇮🇳", marketplace: "Amazon IN", continent: "亚洲" },
-  th: { name: "泰语", flag: "🇹🇭", marketplace: "Amazon TH/Shopee", continent: "亚洲" },
-  vi: { name: "越南语", flag: "🇻🇳", marketplace: "Shopee/Tiki", continent: "亚洲" },
-  id: { name: "印尼语", flag: "🇮🇩", marketplace: "Amazon ID/Tokopedia", continent: "亚洲" },
-  ms: { name: "马来语", flag: "🇲🇾", marketplace: "Amazon MY/Lazada", continent: "亚洲" },
-  ar: { name: "阿拉伯语", flag: "🇸🇦", marketplace: "Amazon SA/AE/EG", continent: "亚洲" },
-  he: { name: "希伯来语", flag: "🇮🇱", marketplace: "Amazon IL", continent: "亚洲" },
-  af: { name: "南非荷兰语", flag: "🇿🇦", marketplace: "Takealot/Amazon ZA", continent: "非洲" },
-  sw: { name: "斯瓦希里语", flag: "🇰🇪", marketplace: "Jumia 东非", continent: "非洲" },
-  am: { name: "阿姆哈拉语", flag: "🇪🇹", marketplace: "Jumia ET", continent: "非洲" },
-  ha: { name: "豪萨语", flag: "🇳🇬", marketplace: "Jumia NG", continent: "非洲" },
-  zu: { name: "祖鲁语", flag: "🇿🇦", marketplace: "Amazon ZA", continent: "非洲" },
-  yo: { name: "约鲁巴语", flag: "🇳🇬", marketplace: "Jumia NG", continent: "非洲" },
-  xh: { name: "科萨语", flag: "🇿🇦", marketplace: "Takealot ZA", continent: "非洲" },
-  mg: { name: "马达加斯加语", flag: "🇲🇬", marketplace: "Jumia MG", continent: "非洲" },
-};
-
-export const LANGUAGE_CODES = Object.keys(SUPPORTED_LANGUAGES);
-
-export function getLanguagesByContinent(continent) {
-  return LANGUAGE_CODES.filter(
-    (code) => SUPPORTED_LANGUAGES[code].continent === continent
+export async function onRequest() {
+  return new Response(
+    JSON.stringify({ languages: SUPPORTED_LANGUAGES }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Access-Control-Allow-Origin": "*",
+      },
+    }
   );
-}
-
-// 兼容旧字段
-export const REGIONS = CONTINENTS;
-
-export function getLanguagesByRegion(region) {
-  return getLanguagesByContinent(region);
 }

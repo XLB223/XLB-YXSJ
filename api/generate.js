@@ -1,11 +1,24 @@
-﻿// Vercel Serverless Function: /api/generate
+// Vercel Serverless Function: /api/generate
 import { handleGenerateRequest } from "./generate-handler.js";
 
-const allowedOrigins = ["https://xlb-yxsj.vercel.app", "http://localhost:5173", "http://localhost:3000"];
+const allowedOrigins = [
+  "https://www.kjdsai.cn",
+  "https://kjdsai.cn",
+  "https://xlb-yxsj.vercel.app",
+  "https://kjdsal.cn",
+  "https://www.kjdsal.cn",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
 
 function setCors(req, res) {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || !origin || origin.startsWith("http://localhost")) {
+  const allowed =
+    allowedOrigins.includes(origin) ||
+    !origin ||
+    origin.startsWith("http://localhost") ||
+    (origin && /\.vercel\.app$/.test(origin));
+  if (allowed) {
     res.setHeader("Access-Control-Allow-Origin", origin || "*");
   }
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");

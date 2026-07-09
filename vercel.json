@@ -4,6 +4,6 @@
   "rewrites": [
     { "source": "/mobile", "destination": "/mobile/index.html" },
     { "source": "/mobile/", "destination": "/mobile/index.html" },
-    { "source": "/((?!api/|mobile/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|mobile/|assets/).*)", "destination": "/index.html" }
   ]
 }

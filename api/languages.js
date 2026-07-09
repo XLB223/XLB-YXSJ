@@ -1,4 +1,4 @@
-﻿// Vercel Serverless Function: /api/languages
+// Vercel Serverless Function: /api/languages
 import { SUPPORTED_LANGUAGES } from "../languages.js";
 
 export default function handler(req, res) {

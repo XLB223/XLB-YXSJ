@@ -1,0 +1,10 @@
+请将微信、支付宝收款码图片放到本目录：
+
+  wechat-pay.png   ← 微信收款码（你发来的绿色那张）
+  alipay-pay.png   ← 支付宝收款码（你发来的蓝色那张）
+
+保存后重启 start.bat，在「开通会员」弹窗中会自动显示。
+
+也可在 .env 中自定义路径：
+  PAYMENT_WECHAT_QR=/assets/payment/wechat-pay.png
+  PAYMENT_ALIPAY_QR=/assets/payment/alipay-pay.png

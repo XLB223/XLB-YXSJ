@@ -2,8 +2,10 @@ import http from "http";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { handleGenerateRequest, getUsageStatus, activateDevice } from "./api/generate-handler.js";
+import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -75,6 +77,11 @@ async function handleRequest(req, res) {
 
   if (url === "/api/languages") {
     sendJson(res, 200, { languages: SUPPORTED_LANGUAGES });
+    return;
+  }
+
+  if (url === "/api/pricing") {
+    sendJson(res, 200, getPurchaseInfo(env));
     return;
   }
 
@@ -156,6 +163,10 @@ async function handleRequest(req, res) {
       ".json": "application/json; charset=utf-8",
       ".webmanifest": "application/manifest+json; charset=utf-8",
       ".svg": "image/svg+xml; charset=utf-8",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".webp": "image/webp",
     };
 
     res.writeHead(200, { "Content-Type": types[ext] || "text/plain; charset=utf-8" });
@@ -208,6 +219,9 @@ server.listen(PORT, HOST, () => {
   if (ip) {
     console.log(`    http://${ip}:${PORT}/mobile/  （手机连同一 WiFi 访问）`);
   }
+  console.log("");
+  console.log("  收款码测试:");
+  console.log(`    http://127.0.0.1:${PORT}/assets/payment/wechat-pay.png`);
   if (!env.DEEPSEEK_API_KEY) {
     console.log("");
     console.log("  [警告] 未检测到 DEEPSEEK_API_KEY");
@@ -217,6 +231,10 @@ server.listen(PORT, HOST, () => {
   console.log("  按 Ctrl+C 停止服务器");
   console.log("========================================");
   console.log("");
+
+  if (process.platform === "win32") {
+    exec(`start "" "http://127.0.0.1:${PORT}"`);
+  }
 });
 
 server.on("error", (error) => {

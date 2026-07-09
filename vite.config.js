@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice } from "./api/generate-handler.js";
+import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
 export default defineConfig(({ mode }) => {
@@ -30,6 +31,13 @@ export default defineConfig(({ mode }) => {
                     : "未配置 DEEPSEEK_API_KEY",
                 })
               );
+              return;
+            }
+
+            if (url === "/api/pricing") {
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify(getPurchaseInfo(env)));
               return;
             }
 
