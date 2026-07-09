@@ -2,15 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#2563eb" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="Listing AI" />
-  <link rel="manifest" href="/mobile/manifest.webmanifest" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="/mobile/icons/icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="/mobile/icons/icon.svg" />
-  <title>Listing AI · 手机版</title>
+  <title>跨境AI Listing生成器</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -21,29 +15,38 @@
       --border: #e5e7eb;
       --bg: #f1f5f9;
       --card: #fff;
-      --safe-b: env(safe-area-inset-bottom, 0px);
-      --safe-t: env(safe-area-inset-top, 0px);
+      --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+      --radius: 12px;
+      --text-muted: #6b7280;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.5;
-      padding-top: var(--safe-t);
-      padding-bottom: calc(112px + var(--safe-b));
+      line-height: 1.6;
+      min-height: 100vh;
     }
-    .app-header {
-      position: sticky;
-      top: 0;
-      z-index: 50;
-      background: var(--primary);
-      color: #fff;
-      padding: 14px 16px;
-      box-shadow: 0 2px 12px rgba(37,99,235,.25);
+    .page {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
     }
-    .app-header h1 { font-size: 1.1rem; font-weight: 700; }
-    .app-header p { font-size: .75rem; opacity: .9; margin-top: 2px; }
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .header h1 {
+      font-size: clamp(1.75rem, 5vw, 2.25rem);
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+    .header p {
+      margin-top: 8px;
+      font-size: 0.95rem;
+      color: var(--text-muted);
+    }
     .version-links {
       display: flex;
       justify-content: center;
@@ -51,30 +54,44 @@
       margin-top: 10px;
     }
     .version-link {
-      padding: 5px 14px;
+      padding: 6px 16px;
       border-radius: 999px;
-      border: 1px solid rgba(255,255,255,.45);
-      background: rgba(255,255,255,.12);
-      color: #fff;
-      font-size: .72rem;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-muted);
+      font-size: 0.82rem;
       text-decoration: none;
     }
-    .version-link.active {
-      background: #fff;
+    .version-link:hover {
+      border-color: var(--primary);
       color: var(--primary);
-      border-color: #fff;
+    }
+    .version-link.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
       font-weight: 600;
     }
     .plan-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      margin-top: 10px;
-      font-size: .78rem;
-      color: var(--muted);
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      font-size: 0.88rem;
+      color: var(--text-muted);
     }
-    .plan-row.pro { color: var(--primary); font-weight: 600; }
+    .plan-row.pro {
+      border-color: #bfdbfe;
+      background: linear-gradient(90deg, #eff6ff, #fff);
+      color: var(--primary);
+      font-weight: 600;
+    }
     .btn-pro {
       flex-shrink: 0;
       padding: 5px 10px;
@@ -98,7 +115,7 @@
     .modal-overlay.show { display: flex; }
     .modal-box {
       width: 100%;
-      max-width: 360px;
+      max-width: 440px;
       background: #fff;
       border-radius: 14px;
       padding: 20px;
@@ -178,16 +195,16 @@
     }
     .btn-cancel { background: #fff; border: 1px solid var(--border); }
     .btn-submit { background: var(--primary); border: none; color: #fff; font-weight: 600; }
-    .main { padding: 12px 14px 20px; }
     .card {
       background: var(--card);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 2px 12px rgba(15,23,42,.06);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(229, 231, 235, 0.8);
     }
-    .card-title { font-size: .95rem; font-weight: 600; margin-bottom: 14px; }
-    label { display: block; font-size: .82rem; font-weight: 500; margin-bottom: 6px; color: var(--muted); }
+    .card-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 16px; }
+    label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 8px; color: var(--text-muted); }
     input, textarea, select {
       width: 100%;
       padding: 12px;
@@ -286,27 +303,24 @@
     .status.show { display: block; }
     .status.error { background: #fef2f2; color: #b91c1c; }
     .status.warn { background: #fffbeb; color: #b45309; }
-    .bottom-bar {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      padding: 10px 14px calc(10px + var(--safe-b));
-      background: rgba(255,255,255,.95);
-      backdrop-filter: blur(8px);
-      border-top: 1px solid var(--border);
-      z-index: 100;
+    .action-bar {
+      margin-top: 8px;
     }
     .btn-generate {
+      display: block;
       width: 100%;
-      padding: 14px;
+      padding: 14px 24px;
       background: var(--primary);
       color: #fff;
       border: none;
-      border-radius: 12px;
+      border-radius: 8px;
       font-size: 1rem;
       font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, opacity 0.2s;
     }
-    .btn-generate:disabled { opacity: .6; }
-    .btn-generate:active:not(:disabled) { background: var(--primary-dark); }
+    .btn-generate:hover:not(:disabled) { background: var(--primary-dark); }
+    .btn-generate:disabled { opacity: 0.65; cursor: not-allowed; }
     .tabs-scroll {
       display: flex;
       gap: 8px;
@@ -369,7 +383,7 @@
     .footer-link a { color: var(--primary); text-decoration: none; }
     .toast {
       position: fixed;
-      left: 50%; bottom: calc(80px + var(--safe-b));
+      left: 50%; bottom: 32px;
       transform: translateX(-50%) translateY(20px);
       background: rgba(31,41,55,.92);
       color: #fff;
@@ -385,16 +399,16 @@
   </style>
 </head>
 <body>
-  <header class="app-header">
-    <h1>跨境 AI Listing 生成器</h1>
-    <p>输入产品信息，一键生成 Amazon 多语言 Listing</p>
-    <div class="version-links">
-      <a href="/" class="version-link">网页版</a>
-      <a href="/mobile/" class="version-link active">手机版</a>
-    </div>
-  </header>
+  <div class="page">
+    <header class="header">
+      <h1>跨境AI Listing生成器</h1>
+      <p>输入产品信息，一键生成 Amazon 多语言 Listing</p>
+      <div class="version-links">
+        <a href="/" class="version-link active">网页版</a>
+        <a href="/mobile/" class="version-link">手机版</a>
+      </div>
+    </header>
 
-  <main class="main">
     <div class="status" id="statusBar"></div>
 
     <form id="form">
@@ -459,6 +473,14 @@
           <label><input type="radio" name="style" value="casual" /> 活泼口语化</label>
         </div>
       </section>
+
+      <section class="card action-bar">
+        <button type="button" class="btn-generate" id="generateBtn">生成 Listing</button>
+        <div class="plan-row" id="planBar">
+          <span id="usageText">加载额度中...</span>
+          <button type="button" class="btn-pro" id="activateBtn">开通会员</button>
+        </div>
+      </section>
     </form>
 
     <section class="card results" id="results" style="display:none">
@@ -470,14 +492,6 @@
       <div id="langPanels"></div>
     </section>
 
-  </main>
-
-  <div class="bottom-bar">
-    <button type="button" class="btn-generate" id="generateBtn">生成 Listing</button>
-    <div class="plan-row" id="planBar">
-      <span id="usageText">加载额度中...</span>
-      <button type="button" class="btn-pro" id="activateBtn">开通会员</button>
-    </div>
   </div>
   <div class="toast" id="toast"></div>
 
