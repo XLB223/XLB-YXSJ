@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
-import { handleGenerateRequest, getUsageStatus, activateDevice } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice, purchasePlan } from "./api/generate-handler.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -60,6 +60,38 @@ export default defineConfig(({ mode }) => {
                     : { error: "缺少 deviceId" }
                 )
               );
+              return;
+            }
+
+            if (url === "/api/purchase") {
+              if (req.method === "OPTIONS") {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
+              if (req.method !== "POST") {
+                res.statusCode = 405;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              let body = "";
+              req.on("data", (chunk) => {
+                body += chunk;
+              });
+              req.on("end", () => {
+                try {
+                  const payload = body ? JSON.parse(body) : {};
+                  const result = purchasePlan(payload.deviceId, payload.planId, env);
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify(result));
+                } catch (error) {
+                  res.statusCode = error.status || 500;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ error: error.message || "开通失败" }));
+                }
+              });
               return;
             }
 

@@ -144,8 +144,17 @@
       padding: 10px 6px;
       text-align: center;
       background: #fff;
+      cursor: pointer;
+      font: inherit;
+      color: inherit;
+      width: 100%;
     }
     .pricing-card.featured { border-color: #93c5fd; background: #eff6ff; }
+    .pricing-card.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+      background: #eff6ff;
+    }
     .pricing-badge {
       position: absolute;
       top: -7px; right: 4px;
@@ -603,7 +612,7 @@
   <div class="modal-overlay" id="contactModal">
     <div class="modal-box contact-modal-box">
       <h3>联系客服</h3>
-      <p class="modal-sub">咨询使用问题，或付款后获取会员激活码</p>
+      <p class="modal-sub">咨询使用问题，或付款遇到问题请联系</p>
       <div class="contact-modal-body">
         <div class="contact-wechat-block">
           <img id="contactModalWechatQr" src="/assets/payment/wechat-service.png" alt="客服微信二维码" />
@@ -626,7 +635,7 @@
       <h3>开通会员</h3>
       <p class="modal-sub" id="pricingTrialNote">免费试用每天 3 次，试用结束后可开通会员。</p>
       <div class="pricing-grid" id="pricingGrid"></div>
-      <p class="payment-note" id="paymentNote">微信 / 支付宝扫码支付对应套餐金额</p>
+      <p class="payment-note" id="paymentNote">请先选择套餐，再扫码支付</p>
       <div class="payment-qr-row">
         <div class="payment-qr-item">
           <img id="wechatPayQr" src="/assets/payment/wechat-pay.png" alt="微信收款码" />
@@ -638,12 +647,9 @@
         </div>
       </div>
       <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
-      <p class="pricing-contact" id="pricingContact">付款后请点击页面左侧「联系客服」获取激活码</p>
-      <label class="activate-label" for="activationCodeInput">已有激活码</label>
-      <input type="text" id="activationCodeInput" placeholder="请输入激活码" />
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
-        <button type="button" class="btn-submit" id="activateSubmitBtn">确认激活</button>
+        <button type="button" class="btn-submit" id="purchaseConfirmBtn">我已完成付款，立即开通</button>
       </div>
     </div>
   </div>
@@ -694,7 +700,6 @@
       planBar: document.getElementById("planBar"),
       activateBtn: document.getElementById("activateBtn"),
       activateModal: document.getElementById("activateModal"),
-      activationCodeInput: document.getElementById("activationCodeInput"),
     };
 
     function toast(msg) {
@@ -704,6 +709,7 @@
     }
 
     let purchaseInfo = null;
+    let selectedPlanId = "half";
 
     async function loadPurchaseInfo() {
       try {
@@ -716,11 +722,20 @@
       renderPricingCards();
     }
 
+    function updatePaymentNote(plans = purchaseInfo?.plans) {
+      const paymentNoteEl = document.getElementById("paymentNote");
+      const plan = (plans || []).find((p) => p.id === selectedPlanId);
+      if (!paymentNoteEl) return;
+      if (plan) {
+        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），完成后点击下方「立即开通」`;
+      } else if (purchaseInfo?.payment?.note) {
+        paymentNoteEl.textContent = purchaseInfo.payment.note;
+      }
+    }
+
     function renderPricingCards() {
       const grid = document.getElementById("pricingGrid");
-      const contactEl = document.getElementById("pricingContact");
       const noteEl = document.getElementById("pricingTrialNote");
-      const paymentNoteEl = document.getElementById("paymentNote");
       const paymentSiteEl = document.getElementById("paymentSite");
       const wechatQrEl = document.getElementById("wechatPayQr");
       const alipayQrEl = document.getElementById("alipayPayQr");
@@ -729,19 +744,31 @@
         { id: "half", name: "半年卡", priceLabel: "¥69.9", period: "6 个月", badge: "划算" },
         { id: "year", name: "年卡", priceLabel: "¥129.9", period: "1 年", badge: "最省" },
       ];
-      grid.innerHTML = plans.map((p) => `
-        <div class="pricing-card${p.id === "half" ? " featured" : ""}">
+      if (!plans.some((p) => p.id === selectedPlanId)) {
+        selectedPlanId = plans[1]?.id || plans[0]?.id || "half";
+      }
+      grid.innerHTML = plans
+        .map(
+          (p) => `
+        <button type="button" class="pricing-card${p.id === selectedPlanId ? " selected" : ""}${p.id === "half" && p.id !== selectedPlanId ? " featured" : ""}" data-plan="${p.id}">
           ${p.badge ? `<span class="pricing-badge">${p.badge}</span>` : ""}
           <div class="pricing-name">${p.name}</div>
           <div class="pricing-price">${p.priceLabel}</div>
           <div class="pricing-period">${p.period}</div>
-        </div>`).join("");
+        </button>`
+        )
+        .join("");
+      grid.querySelectorAll(".pricing-card").forEach((btn) => {
+        btn.onclick = () => {
+          selectedPlanId = btn.dataset.plan;
+          renderPricingCards();
+        };
+      });
       if (purchaseInfo?.trialNote) noteEl.textContent = purchaseInfo.trialNote;
-      if (purchaseInfo?.payment?.note) paymentNoteEl.textContent = purchaseInfo.payment.note;
       if (purchaseInfo?.siteUrl) paymentSiteEl.textContent = purchaseInfo.siteUrl;
       wechatQrEl.src = purchaseInfo?.payment?.wechatQr || "/assets/payment/wechat-pay.png";
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
-      contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "付款后请点击页面左侧「联系客服」获取激活码"}</strong>`;
+      updatePaymentNote(plans);
       renderContactModal();
     }
 
@@ -803,27 +830,38 @@
 
     els.activateBtn.onclick = () => {
       renderPricingCards();
-      els.activationCodeInput.value = "";
       els.activateModal.classList.add("show");
-      els.activationCodeInput.focus();
     };
     document.getElementById("activateCancelBtn").onclick = () => els.activateModal.classList.remove("show");
-    document.getElementById("activateSubmitBtn").onclick = async () => {
-      const code = els.activationCodeInput.value.trim();
-      if (!code) { alert("请输入激活码"); return; }
+    document.getElementById("purchaseConfirmBtn").onclick = async () => {
+      const btn = document.getElementById("purchaseConfirmBtn");
+      if (!selectedPlanId) {
+        alert("请选择套餐");
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "开通中...";
       try {
-        const r = await fetch(`${API}/api/activate`, {
+        const r = await fetch(`${API}/api/purchase`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, code }),
+          body: JSON.stringify({ deviceId, planId: selectedPlanId }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
         els.activateModal.classList.remove("show");
-        toast(d.message || "会员激活成功");
-        refreshUsage();
+        applyUsageStatus({
+          isPro: true,
+          remaining: null,
+          pricingHint: "",
+          message: d.message || "会员已开通",
+        });
+        toast(d.message || "会员已开通");
       } catch (e) {
-        alert(e.message || "激活失败");
+        alert(e.message || "开通失败");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "我已完成付款，立即开通";
       }
     };
     els.activateModal.onclick = (e) => {
@@ -1145,7 +1183,7 @@
         if (e.name === "AbortError") alert("请求超时，请减少语言数量后重试");
         else {
           alert(e.message || "生成失败");
-          if (e.message?.includes("开通会员") || e.message?.includes("激活码")) {
+          if (e.message?.includes("开通会员") || e.message?.includes("付款后")) {
             renderPricingCards();
             els.activateModal.classList.add("show");
           }

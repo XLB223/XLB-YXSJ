@@ -4,7 +4,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
-import { handleGenerateRequest, getUsageStatus, activateDevice } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice, purchasePlan } from "./api/generate-handler.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -93,6 +93,23 @@ async function handleRequest(req, res) {
       return;
     }
     sendJson(res, 200, getUsageStatus(deviceId, env));
+    return;
+  }
+
+  if (url === "/api/purchase" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      const result = purchasePlan(payload.deviceId, payload.planId, env);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || "开通失败" });
+    }
+    return;
+  }
+
+  if (url === "/api/purchase") {
+    sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
 

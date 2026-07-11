@@ -197,9 +197,30 @@ export function activateDevice(deviceId, code, env = process.env) {
     throw error;
   }
 
+  return applyPlanToDevice(deviceId, planId, { source: "code", code: normalized });
+}
+
+export function purchasePlan(deviceId, planId, env = process.env) {
+  if (!deviceId?.trim()) {
+    const error = new Error("缺少设备标识");
+    error.status = 400;
+    throw error;
+  }
+
+  const normalizedPlanId = String(planId || "").trim();
+  if (!getPlanById(normalizedPlanId)) {
+    const error = new Error("请选择有效的会员套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  return applyPlanToDevice(deviceId, normalizedPlanId, { source: "purchase" });
+}
+
+function applyPlanToDevice(deviceId, planId, meta = {}) {
   const plan = getPlanById(planId);
   if (!plan) {
-    const error = new Error("激活码配置异常，请联系管理员");
+    const error = new Error("套餐配置异常，请联系管理员");
     error.status = 500;
     throw error;
   }
@@ -213,7 +234,7 @@ export function activateDevice(deviceId, code, env = process.env) {
     renewedAt: new Date().toISOString(),
     expiresAt,
     plan: planId,
-    code: normalized,
+    ...meta,
   };
   saveStore(store);
 
@@ -222,7 +243,7 @@ export function activateDevice(deviceId, code, env = process.env) {
     plan: planId,
     planName: plan.name,
     expiresAt,
-    message: `${plan.name}激活成功，有效期至 ${formatDate(expiresAt)}，已解锁无限次生成`,
+    message: `${plan.name}已开通，有效期至 ${formatDate(expiresAt)}，已解锁无限次生成`,
   };
 }
 
@@ -232,7 +253,7 @@ export function assertCanGenerate(deviceId, env = process.env) {
   const status = getUsageStatus(deviceId, env);
   if (status.remaining <= 0) {
     const error = new Error(
-      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，购买后输入激活码即可无限生成。`
+      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，付款后即可无限生成。`
     );
     error.status = 402;
     error.code = "DAILY_LIMIT_REACHED";

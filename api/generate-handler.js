@@ -4,6 +4,7 @@ import {
   recordGeneration,
   getUsageStatus,
   activateDevice,
+  purchasePlan,
 } from "./usage-store.js";
 import {
   CATEGORY_LIMITS,
@@ -12,7 +13,7 @@ import {
   postProcessListing,
 } from "./listing-utils.js";
 
-export { getUsageStatus, activateDevice };
+export { getUsageStatus, activateDevice, purchasePlan };
 
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
 const BATCH_SIZE = 4;
