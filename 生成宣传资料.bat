@@ -7,15 +7,20 @@ echo   Generate promo materials
 echo ========================================
 echo.
 
-if exist "跨境AI Listing生成器-宣传推广资料.doc" (
-  echo [OK] Word pack found:
-  echo      跨境AI Listing生成器-宣传推广资料.doc
+echo Generating Word promo pack...
+where python >nul 2>&1
+if errorlevel 1 (
+  echo [SKIP] Python not installed, cannot generate Word
 ) else (
-  echo [INFO] Word pack not found
+  pip install python-docx -q >nul 2>&1
+  python generate-promo.py
+  if exist "跨境AI Listing生成器-宣传推广资料.docx" (
+    echo [OK] Word generated: 跨境AI Listing生成器-宣传推广资料.docx
+  )
 )
 
 echo.
-echo Trying to generate PPT one-pager...
+echo Generating PPT one-pager...
 where node >nul 2>&1
 if errorlevel 1 (
   echo [SKIP] Node.js not installed, cannot generate PPT
@@ -30,7 +35,7 @@ if exist "跨境AI Listing生成器-宣传一页纸.pptx" (
 
 :open_doc
 echo.
-echo Opening Word pack...
-start "" "跨境AI Listing生成器-宣传推广资料.doc"
+echo Opening promo materials...
+if exist "跨境AI Listing生成器-宣传推广资料.docx" start "" "跨境AI Listing生成器-宣传推广资料.docx"
 if exist "跨境AI Listing生成器-宣传一页纸.pptx" start "" "跨境AI Listing生成器-宣传一页纸.pptx"
 pause

@@ -172,7 +172,7 @@ export function getUsageStatus(deviceId, env = process.env) {
     message:
       remaining > 0
         ? `免费试用 · 今日剩余 ${remaining}/${FREE_DAILY_LIMIT} 次`
-        : `免费试用今日已用完 · 开通会员 ${formatPriceSummary()}`,
+        : "免费试用今日已用完",
   };
 }
 

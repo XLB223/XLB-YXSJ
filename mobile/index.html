@@ -69,10 +69,33 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px 10px;
       margin-top: 10px;
       font-size: .78rem;
       color: var(--muted);
+      min-width: 0;
+    }
+    .plan-row.plan-row-exhausted {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .plan-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .plan-pricing {
+      font-size: .72rem;
+      color: var(--muted);
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .plan-pricing.hidden { display: none; }
+    .plan-row.plan-row-exhausted .btn-pro {
+      align-self: flex-end;
+      margin-top: 2px;
     }
     .plan-row.pro { color: var(--primary); font-weight: 600; }
     .btn-pro {
@@ -159,6 +182,77 @@
       margin: 0 auto 4px;
     }
     .payment-qr-item span { font-size: .68rem; color: var(--muted); font-weight: 500; }
+    .contact-side-btn {
+      position: fixed;
+      left: 0;
+      bottom: calc(120px + var(--safe-b));
+      z-index: 250;
+      border: none;
+      border-radius: 0 10px 10px 0;
+      background: var(--primary);
+      color: #fff;
+      padding: 8px 10px;
+      font-size: .72rem;
+      font-weight: 600;
+      line-height: 1.35;
+      cursor: pointer;
+      box-shadow: 2px 0 12px rgba(37, 99, 235, .25);
+    }
+    .contact-modal-box { max-width: 360px; }
+    .contact-modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .contact-wechat-block {
+      text-align: center;
+      padding: 14px;
+      border: 1px solid #86efac;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #f0fdf4, #fff);
+    }
+    .contact-wechat-block img {
+      width: 160px;
+      height: 160px;
+      object-fit: contain;
+      border-radius: 8px;
+      display: block;
+      margin: 0 auto 8px;
+      background: #fff;
+    }
+    .contact-wechat-block .contact-label {
+      display: block;
+      font-size: .88rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .contact-wechat-block .contact-hint {
+      display: block;
+      font-size: .76rem;
+      color: #16a34a;
+    }
+    .contact-email-block {
+      text-align: center;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #f8fafc;
+    }
+    .contact-email-block .contact-label {
+      display: block;
+      font-size: .82rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .contact-email-block a {
+      font-size: .95rem;
+      font-weight: 600;
+      color: var(--primary);
+      text-decoration: none;
+      word-break: break-all;
+    }
     .payment-site { text-align: center; font-size: .72rem; color: var(--primary); margin-bottom: 10px; }
     .activate-label { display: block; font-size: .78rem; font-weight: 500; margin-bottom: 6px; }
     .modal-box input {
@@ -492,14 +586,40 @@
 
   </main>
 
+  <button type="button" class="contact-side-btn" id="contactSideBtn">联系客服</button>
+
   <div class="bottom-bar">
     <button type="button" class="btn-generate" id="generateBtn">生成 Listing</button>
     <div class="plan-row" id="planBar">
-      <span id="usageText">加载额度中...</span>
+      <div class="plan-main">
+        <span id="usageText">加载额度中...</span>
+        <span id="pricingHint" class="plan-pricing hidden"></span>
+      </div>
       <button type="button" class="btn-pro" id="activateBtn">开通会员</button>
     </div>
   </div>
   <div class="toast" id="toast"></div>
+
+  <div class="modal-overlay" id="contactModal">
+    <div class="modal-box contact-modal-box">
+      <h3>联系客服</h3>
+      <p class="modal-sub">咨询使用问题，或付款后获取会员激活码</p>
+      <div class="contact-modal-body">
+        <div class="contact-wechat-block">
+          <img id="contactModalWechatQr" src="/assets/payment/wechat-service.png" alt="客服微信二维码" />
+          <span class="contact-label">扫码添加微信</span>
+          <span class="contact-hint" id="contactModalWechatHint"></span>
+        </div>
+        <div class="contact-email-block">
+          <span class="contact-label">电子邮箱</span>
+          <a id="contactModalEmail" href="mailto:108729447@qq.com">108729447@qq.com</a>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="contactModalClose" style="flex:1">关闭</button>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-overlay" id="activateModal">
     <div class="modal-box">
@@ -518,7 +638,7 @@
         </div>
       </div>
       <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
-      <p class="pricing-contact" id="pricingContact">付款后联系客服获取激活码</p>
+      <p class="pricing-contact" id="pricingContact">付款后请点击页面左侧「联系客服」获取激活码</p>
       <label class="activate-label" for="activationCodeInput">已有激活码</label>
       <input type="text" id="activationCodeInput" placeholder="请输入激活码" />
       <div class="modal-actions">
@@ -570,6 +690,8 @@
       historyChips: document.getElementById("historyChips"),
       toast: document.getElementById("toast"),
       usageText: document.getElementById("usageText"),
+      pricingHint: document.getElementById("pricingHint"),
+      planBar: document.getElementById("planBar"),
       activateBtn: document.getElementById("activateBtn"),
       activateModal: document.getElementById("activateModal"),
       activationCodeInput: document.getElementById("activationCodeInput"),
@@ -619,20 +741,63 @@
       if (purchaseInfo?.siteUrl) paymentSiteEl.textContent = purchaseInfo.siteUrl;
       wechatQrEl.src = purchaseInfo?.payment?.wechatQr || "/assets/payment/wechat-pay.png";
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
-      contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "付款后联系客服获取激活码"}</strong>`;
+      contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "付款后请点击页面左侧「联系客服」获取激活码"}</strong>`;
+      renderContactModal();
     }
 
+    function renderContactModal() {
+      const svc = purchaseInfo?.contactService;
+      const qrEl = document.getElementById("contactModalWechatQr");
+      const hintEl = document.getElementById("contactModalWechatHint");
+      const emailEl = document.getElementById("contactModalEmail");
+      if (qrEl) qrEl.src = svc?.wechatQr || "/assets/payment/wechat-service.png";
+      if (hintEl) hintEl.textContent = svc?.hint || svc?.wechatId || "";
+      const email = svc?.email || "108729447@qq.com";
+      if (emailEl) {
+        emailEl.textContent = email;
+        emailEl.href = `mailto:${email}`;
+      }
+    }
+
+    const contactModal = document.getElementById("contactModal");
+    document.getElementById("contactSideBtn").onclick = () => {
+      renderContactModal();
+      contactModal.classList.add("show");
+    };
+    document.getElementById("contactModalClose").onclick = () => contactModal.classList.remove("show");
+    contactModal.onclick = (e) => {
+      if (e.target === contactModal) contactModal.classList.remove("show");
+    };
+
     loadPurchaseInfo();
+
+    function applyUsageStatus(usage) {
+      if (!usage) return;
+      els.usageText.textContent = usage.message || "免费试用 · 每日 3 次";
+      els.activateBtn.classList.toggle("hidden", usage.isPro);
+      const showPricing = !usage.isPro && usage.remaining === 0 && usage.pricingHint;
+      if (els.pricingHint) {
+        els.pricingHint.textContent = showPricing ? usage.pricingHint : "";
+        els.pricingHint.classList.toggle("hidden", !showPricing);
+      }
+      if (els.planBar) {
+        els.planBar.classList.toggle("plan-row-exhausted", Boolean(showPricing));
+      }
+    }
 
     async function refreshUsage() {
       try {
         const r = await fetch(`${API}/api/usage?deviceId=${encodeURIComponent(deviceId)}`);
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        els.usageText.textContent = d.message;
-        els.activateBtn.classList.toggle("hidden", d.isPro);
+        applyUsageStatus(d);
       } catch {
         els.usageText.textContent = "免费试用 · 每日 3 次";
+        if (els.pricingHint) {
+          els.pricingHint.textContent = "";
+          els.pricingHint.classList.add("hidden");
+        }
+        if (els.planBar) els.planBar.classList.remove("plan-row-exhausted");
       }
     }
 
@@ -969,8 +1134,7 @@
         currentLanguages = languages;
         saveHistory({ productName, sellingPoints, category });
         if (data.usage) {
-          els.usageText.textContent = data.usage.message;
-          els.activateBtn.classList.toggle("hidden", data.usage.isPro);
+          applyUsageStatus(data.usage);
         } else {
           refreshUsage();
         }

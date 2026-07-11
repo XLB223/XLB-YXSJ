@@ -37,16 +37,25 @@ export function getPlanById(planId) {
 
 export function getPurchaseInfo(env = process.env) {
   const siteUrl = (env.SITE_URL || "www.kjdsai.cn").trim();
-  const contact = (env.CONTACT_INFO || env.CONTACT_WECHAT || "").trim();
+  const contact = (env.CONTACT_INFO || "").trim();
+  const wechatId = (env.CONTACT_WECHAT_ID || env.CONTACT_WECHAT || "").trim();
+  const email = (env.CONTACT_EMAIL || "108729447@qq.com").trim();
 
   return {
     plans: PRICING_PLANS,
     siteUrl,
-    contact: contact || `付款后访问 ${siteUrl} 或联系客服获取激活码`,
+    contact: contact || `付款后请点击页面左侧「联系客服」获取激活码`,
+    contactService: {
+      wechatQr: (env.CONTACT_WECHAT_QR || "/assets/payment/wechat-service.png").trim(),
+      wechatId,
+      email,
+      label: "联系客服",
+      hint: wechatId ? `微信号：${wechatId}` : "扫码添加客服微信",
+    },
     payment: {
       wechatQr: (env.PAYMENT_WECHAT_QR || "/assets/payment/wechat-pay.png").trim(),
       alipayQr: (env.PAYMENT_ALIPAY_QR || "/assets/payment/alipay-pay.png").trim(),
-      note: "微信/支付宝扫码支付对应套餐金额，付款后联系客服获取激活码",
+      note: "微信 / 支付宝扫码支付对应套餐金额",
     },
     freeDailyLimit: FREE_DAILY_LIMIT,
     trialNote: "免费试用每天 3 次，试用结束后可扫码开通会员",
