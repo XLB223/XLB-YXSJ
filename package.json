@@ -8,7 +8,9 @@
     "dev": "vite",
     "build": "vite build && node scripts/copy-static.mjs",
     "preview": "vite preview",
-    "test:api": "node test-api.mjs"
+    "test:api": "node test-api.mjs",
+    "codes:list": "node scripts/list-codes.mjs",
+    "codes:unbind": "node scripts/unbind-code.mjs"
   },
   "devDependencies": {
     "vite": "^6.3.5"

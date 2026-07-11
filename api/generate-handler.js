@@ -5,6 +5,9 @@ import {
   getUsageStatus,
   activateDevice,
   purchasePlan,
+  claimAndActivate,
+  getActivationInventory,
+  upgradePlan,
 } from "./usage-store.js";
 import {
   CATEGORY_LIMITS,
@@ -13,7 +16,7 @@ import {
   postProcessListing,
 } from "./listing-utils.js";
 
-export { getUsageStatus, activateDevice, purchasePlan };
+export { getUsageStatus, activateDevice, purchasePlan, claimAndActivate, getActivationInventory, upgradePlan };
 
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
 const BATCH_SIZE = 4;

@@ -31,8 +31,52 @@ export const PRICING_PLANS = [
 
 const PLAN_BY_ID = Object.fromEntries(PRICING_PLANS.map((plan) => [plan.id, plan]));
 
+export const PLAN_TIER_ORDER = { month: 1, half: 2, year: 3 };
+
 export function getPlanById(planId) {
   return PLAN_BY_ID[planId] || null;
+}
+
+export function getPlanTier(planId) {
+  return PLAN_TIER_ORDER[planId] || 0;
+}
+
+export function formatMoney(amount) {
+  if (amount == null || Number.isNaN(amount)) return "";
+  const rounded = Math.round(Number(amount) * 10) / 10;
+  return `¥${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}`;
+}
+
+export function calculateUpgradePrice(currentPlanId, targetPlanId) {
+  const current = getPlanById(currentPlanId);
+  const target = getPlanById(targetPlanId);
+  if (!current || !target) return null;
+  if (getPlanTier(targetPlanId) <= getPlanTier(currentPlanId)) return null;
+
+  const diff = Math.round((target.price - current.price) * 10) / 10;
+  return diff > 0 ? diff : null;
+}
+
+export function buildUpgradeOptions(currentPlanId) {
+  const currentTier = getPlanTier(currentPlanId);
+  if (!currentTier) return [];
+
+  return PRICING_PLANS.filter((plan) => getPlanTier(plan.id) > currentTier)
+    .map((target) => {
+      const diffPrice = calculateUpgradePrice(currentPlanId, target.id);
+      return {
+        id: target.id,
+        name: target.name,
+        price: target.price,
+        priceLabel: target.priceLabel,
+        period: target.period,
+        days: target.days,
+        badge: target.badge,
+        diffPrice,
+        diffLabel: formatMoney(diffPrice),
+      };
+    })
+    .filter((item) => item.diffPrice != null);
 }
 
 export function getPurchaseInfo(env = process.env) {
@@ -44,7 +88,7 @@ export function getPurchaseInfo(env = process.env) {
   return {
     plans: PRICING_PLANS,
     siteUrl,
-    contact: contact || "付款后请点击左侧「联系客服」，发送付款截图获取激活码",
+    contact: contact || "请先选择套餐并扫码支付，再点击下方按钮自动领取激活码并开通",
     contactService: {
       wechatQr: (env.CONTACT_WECHAT_QR || "/assets/payment/wechat-service.png").trim(),
       wechatId,

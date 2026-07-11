@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
-import { handleGenerateRequest, getUsageStatus, activateDevice, purchasePlan } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice, claimAndActivate, getActivationInventory, upgradePlan } from "./api/generate-handler.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -37,7 +37,12 @@ export default defineConfig(({ mode }) => {
             if (url === "/api/pricing") {
               res.statusCode = 200;
               res.setHeader("Content-Type", "application/json; charset=utf-8");
-              res.end(JSON.stringify(getPurchaseInfo(env)));
+              res.end(
+                JSON.stringify({
+                  ...getPurchaseInfo(env),
+                  activationInventory: getActivationInventory(env),
+                })
+              );
               return;
             }
 
@@ -82,7 +87,7 @@ export default defineConfig(({ mode }) => {
               req.on("end", () => {
                 try {
                   const payload = body ? JSON.parse(body) : {};
-                  const result = purchasePlan(payload.deviceId, payload.planId, env);
+                  const result = claimAndActivate(payload.deviceId, payload.planId, env);
                   res.statusCode = 200;
                   res.setHeader("Content-Type", "application/json; charset=utf-8");
                   res.end(JSON.stringify(result));
@@ -90,6 +95,38 @@ export default defineConfig(({ mode }) => {
                   res.statusCode = error.status || 500;
                   res.setHeader("Content-Type", "application/json; charset=utf-8");
                   res.end(JSON.stringify({ error: error.message || "开通失败" }));
+                }
+              });
+              return;
+            }
+
+            if (url === "/api/upgrade") {
+              if (req.method === "OPTIONS") {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
+              if (req.method !== "POST") {
+                res.statusCode = 405;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              let body = "";
+              req.on("data", (chunk) => {
+                body += chunk;
+              });
+              req.on("end", () => {
+                try {
+                  const payload = body ? JSON.parse(body) : {};
+                  const result = upgradePlan(payload.deviceId, payload.planId, env);
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify(result));
+                } catch (error) {
+                  res.statusCode = error.status || 500;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ error: error.message || "升级失败" }));
                 }
               });
               return;

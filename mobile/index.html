@@ -108,6 +108,31 @@
       font-size: .72rem;
     }
     .btn-pro.hidden { display: none; }
+    .btn-upgrade {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, #059669, #10b981);
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-upgrade.hidden { display: none; }
+    .current-plan-banner {
+      font-size: .76rem;
+      color: #166534;
+      background: #ecfdf5;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      line-height: 1.45;
+    }
+    .current-plan-banner.hidden { display: none; }
+    .purchase-only.hidden { display: none !important; }
     .modal-overlay {
       display: none;
       position: fixed;
@@ -172,6 +197,51 @@
       padding: 8px 10px;
       margin-bottom: 12px;
       line-height: 1.4;
+    }
+    .revealed-code {
+      margin-bottom: 12px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #86efac;
+      background: linear-gradient(180deg, #f0fdf4, #fff);
+      text-align: center;
+    }
+    .revealed-code.hidden { display: none; }
+    .revealed-code strong { display: block; font-size: .92rem; color: #166534; margin-bottom: 6px; }
+    .revealed-code .code-value {
+      display: block;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: .04em;
+      margin: 4px 0 6px;
+      word-break: break-all;
+    }
+    .revealed-code p { font-size: .76rem; color: var(--muted); line-height: 1.45; }
+    .manual-code { margin-bottom: 12px; }
+    .manual-code summary {
+      font-size: .76rem;
+      color: var(--primary);
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .inventory-warn {
+      font-size: .72rem;
+      color: #b45309;
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+      line-height: 1.45;
+    }
+    .inventory-warn.hidden { display: none; }
+    .device-policy-note {
+      font-size: .72rem;
+      color: var(--muted);
+      text-align: center;
+      margin: 0 0 10px;
+      line-height: 1.45;
     }
     .payment-note { font-size: .72rem; color: var(--muted); text-align: center; margin-bottom: 8px; }
     .payment-qr-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
@@ -605,6 +675,7 @@
         <span id="pricingHint" class="plan-pricing hidden"></span>
       </div>
       <button type="button" class="btn-pro" id="activateBtn">开通会员</button>
+      <button type="button" class="btn-upgrade hidden" id="upgradeBtn">升级套餐</button>
     </div>
   </div>
   <div class="toast" id="toast"></div>
@@ -612,7 +683,7 @@
   <div class="modal-overlay" id="contactModal">
     <div class="modal-box contact-modal-box">
       <h3>联系客服</h3>
-      <p class="modal-sub">咨询使用问题，或付款遇到问题请联系</p>
+      <p class="modal-sub">咨询使用问题；换电脑请提供激活码，客服可远程解绑后在新电脑重新激活</p>
       <div class="contact-modal-body">
         <div class="contact-wechat-block">
           <img id="contactModalWechatQr" src="/assets/payment/wechat-service.png" alt="客服微信二维码" />
@@ -632,8 +703,9 @@
 
   <div class="modal-overlay" id="activateModal">
     <div class="modal-box">
-      <h3>开通会员</h3>
+      <h3 id="activateModalTitle">开通会员</h3>
       <p class="modal-sub" id="pricingTrialNote">免费试用每天 3 次，试用结束后可开通会员。</p>
+      <div class="current-plan-banner hidden" id="currentPlanBanner"></div>
       <div class="pricing-grid" id="pricingGrid"></div>
       <p class="payment-note" id="paymentNote">请先选择套餐，再扫码支付</p>
       <div class="payment-qr-row">
@@ -647,12 +719,25 @@
         </div>
       </div>
       <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
-      <p class="pricing-contact" id="pricingContact">付款后请点击左侧「联系客服」，发送付款截图获取激活码</p>
-      <label class="activate-label" for="activationCodeInput">输入激活码开通</label>
-      <input type="text" id="activationCodeInput" placeholder="请输入客服提供的激活码" autocomplete="off" />
+      <div class="inventory-warn hidden purchase-only" id="inventoryWarn"></div>
+      <p class="device-policy-note purchase-only" id="devicePolicyNote"></p>
+      <div class="revealed-code hidden purchase-only" id="revealedCodeBox">
+        <strong>开通成功</strong>
+        <span class="code-value" id="revealedCodeText"></span>
+        <p id="revealedCodeMessage"></p>
+      </div>
+      <p class="pricing-contact purchase-only" id="pricingContact">请先选择套餐并扫码支付，再点击下方按钮自动领取激活码并开通</p>
+      <details class="manual-code purchase-only">
+        <summary>已有激活码？点击手动输入</summary>
+        <label class="activate-label" for="activationCodeInput">激活码</label>
+        <input type="text" id="activationCodeInput" placeholder="请输入激活码" autocomplete="off" />
+        <div class="modal-actions" style="margin-top:10px">
+          <button type="button" class="btn-submit" id="activateSubmitBtn" style="flex:1">手动激活</button>
+        </div>
+      </details>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
-        <button type="button" class="btn-submit" id="activateSubmitBtn">确认开通</button>
+        <button type="button" class="btn-submit" id="claimActivateBtn">我已完成付款，领取激活码并开通</button>
       </div>
     </div>
   </div>
@@ -713,7 +798,64 @@
     }
 
     let purchaseInfo = null;
+    let currentUsage = null;
+    let modalMode = "purchase";
     let selectedPlanId = "half";
+
+    function getModalPlans() {
+      const fallback = [
+        { id: "month", name: "月卡", priceLabel: "¥29.9", period: "1 个月" },
+        { id: "half", name: "半年卡", priceLabel: "¥69.9", period: "6 个月", badge: "划算" },
+        { id: "year", name: "年卡", priceLabel: "¥129.9", period: "1 年", badge: "最省" },
+      ];
+      if (modalMode === "upgrade") return currentUsage?.upgradeOptions || [];
+      return purchaseInfo?.plans || fallback;
+    }
+
+    function updateModalModeUI() {
+      const isUpgrade = modalMode === "upgrade";
+      const titleEl = document.getElementById("activateModalTitle");
+      const bannerEl = document.getElementById("currentPlanBanner");
+      const claimBtn = document.getElementById("claimActivateBtn");
+      const noteEl = document.getElementById("pricingTrialNote");
+      document.querySelectorAll(".purchase-only").forEach((el) => el.classList.toggle("hidden", isUpgrade));
+      if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
+      if (noteEl) {
+        noteEl.textContent = isUpgrade
+          ? "补差价即可升级到更高档位，升级后按新套餐时长重新计算有效期"
+          : purchaseInfo?.trialNote || "免费试用每天 3 次，试用结束后可开通会员。";
+      }
+      if (bannerEl) {
+        if (isUpgrade && currentUsage?.isPro) {
+          bannerEl.textContent = `当前套餐：${currentUsage.planName || "会员"}${currentUsage.daysRemaining != null ? ` · 剩余 ${currentUsage.daysRemaining} 天` : ""}`;
+          bannerEl.classList.remove("hidden");
+        } else {
+          bannerEl.classList.add("hidden");
+        }
+      }
+      if (claimBtn) claimBtn.textContent = isUpgrade ? "我已完成补差价，立即升级" : "我已完成付款，领取激活码并开通";
+    }
+
+    function openPurchaseModal() {
+      modalMode = "purchase";
+      resetActivateModalView();
+      updateModalModeUI();
+      renderPricingCards();
+      els.activateModal.classList.add("show");
+    }
+
+    function openUpgradeModal() {
+      if (!currentUsage?.upgradeOptions?.length) {
+        alert("当前已是最高档位套餐");
+        return;
+      }
+      modalMode = "upgrade";
+      selectedPlanId = currentUsage.upgradeOptions[0].id;
+      resetActivateModalView();
+      updateModalModeUI();
+      renderPricingCards();
+      els.activateModal.classList.add("show");
+    }
 
     async function loadPurchaseInfo() {
       try {
@@ -726,12 +868,60 @@
       renderPricingCards();
     }
 
-    function updatePaymentNote(plans = purchaseInfo?.plans) {
+    function updateInventoryWarn() {
+      if (modalMode === "upgrade") return;
+      const warnEl = document.getElementById("inventoryWarn");
+      if (!warnEl) return;
+      const inv = purchaseInfo?.activationInventory;
+      if (!inv?.configured) {
+        warnEl.textContent =
+          "服务器尚未配置激活码（.env 中 ACTIVATION_CODES_*），请联系管理员配置后重启 pm2。";
+        warnEl.classList.remove("hidden");
+        return;
+      }
+      const planInv = inv.plans?.[selectedPlanId];
+      if (planInv && planInv.ready && planInv.available <= 0) {
+        warnEl.textContent = "该套餐激活码已发完，请换套餐或点击「联系客服」。";
+        warnEl.classList.remove("hidden");
+        return;
+      }
+      if (planInv && !planInv.ready) {
+        warnEl.textContent = "该套餐未配置激活码，请选择其他套餐或联系客服。";
+        warnEl.classList.remove("hidden");
+        return;
+      }
+      warnEl.classList.add("hidden");
+    }
+
+    function updateDevicePolicyNote() {
+      const noteEl = document.getElementById("devicePolicyNote");
+      if (!noteEl) return;
+      noteEl.textContent = "提示：每个激活码仅限一台电脑使用，不可共享";
+    }
+
+    function showRevealedCode(code, message) {
+      const box = document.getElementById("revealedCodeBox");
+      const codeEl = document.getElementById("revealedCodeText");
+      const msgEl = document.getElementById("revealedCodeMessage");
+      if (!box || !codeEl || !msgEl) return;
+      codeEl.textContent = code || "";
+      msgEl.textContent = message || "";
+      box.classList.toggle("hidden", !code);
+    }
+
+    function resetActivateModalView() {
+      showRevealedCode("", "");
+      if (els.activationCodeInput) els.activationCodeInput.value = "";
+    }
+
+    function updatePaymentNote(plans = getModalPlans()) {
       const paymentNoteEl = document.getElementById("paymentNote");
       const plan = (plans || []).find((p) => p.id === selectedPlanId);
       if (!paymentNoteEl) return;
-      if (plan) {
-        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款后联系客服获取激活码`;
+      if (modalMode === "upgrade" && plan) {
+        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}）`;
+      } else if (plan) {
+        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款后点击下方按钮自动领取激活码`;
       } else if (purchaseInfo?.payment?.note) {
         paymentNoteEl.textContent = purchaseInfo.payment.note;
       }
@@ -744,22 +934,23 @@
       const paymentSiteEl = document.getElementById("paymentSite");
       const wechatQrEl = document.getElementById("wechatPayQr");
       const alipayQrEl = document.getElementById("alipayPayQr");
-      const plans = purchaseInfo?.plans || [
-        { id: "month", name: "月卡", priceLabel: "¥29.9", period: "1 个月" },
-        { id: "half", name: "半年卡", priceLabel: "¥69.9", period: "6 个月", badge: "划算" },
-        { id: "year", name: "年卡", priceLabel: "¥129.9", period: "1 年", badge: "最省" },
-      ];
+      const plans = getModalPlans();
+      if (!plans.length) {
+        grid.innerHTML = `<p style="font-size:.78rem;color:var(--muted);text-align:center;padding:8px 0">暂无可升级套餐</p>`;
+        updatePaymentNote(plans);
+        return;
+      }
       if (!plans.some((p) => p.id === selectedPlanId)) {
-        selectedPlanId = plans[1]?.id || plans[0]?.id || "half";
+        selectedPlanId = plans[0]?.id || "half";
       }
       grid.innerHTML = plans
         .map(
           (p) => `
-        <button type="button" class="pricing-card${p.id === selectedPlanId ? " selected" : ""}${p.id === "half" && p.id !== selectedPlanId ? " featured" : ""}" data-plan="${p.id}">
+        <button type="button" class="pricing-card${p.id === selectedPlanId ? " selected" : ""}${p.id === "half" && p.id !== selectedPlanId && modalMode !== "upgrade" ? " featured" : ""}" data-plan="${p.id}">
           ${p.badge ? `<span class="pricing-badge">${p.badge}</span>` : ""}
           <div class="pricing-name">${p.name}</div>
-          <div class="pricing-price">${p.priceLabel}</div>
-          <div class="pricing-period">${p.period}</div>
+          <div class="pricing-price">${modalMode === "upgrade" ? p.diffLabel || p.priceLabel : p.priceLabel}</div>
+          <div class="pricing-period">${modalMode === "upgrade" ? `补差价 · ${p.period}` : p.period}</div>
         </button>`
         )
         .join("");
@@ -769,14 +960,17 @@
           renderPricingCards();
         };
       });
-      if (purchaseInfo?.trialNote) noteEl.textContent = purchaseInfo.trialNote;
+      if (modalMode !== "upgrade" && purchaseInfo?.trialNote) noteEl.textContent = purchaseInfo.trialNote;
       if (purchaseInfo?.siteUrl) paymentSiteEl.textContent = purchaseInfo.siteUrl;
       wechatQrEl.src = purchaseInfo?.payment?.wechatQr || "/assets/payment/wechat-pay.png";
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
       updatePaymentNote(plans);
       if (contactEl) {
-        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "付款后请点击左侧「联系客服」，发送付款截图获取激活码"}</strong>`;
+        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "请先选择套餐并扫码支付，再点击下方按钮自动领取激活码并开通"}</strong>`;
       }
+      updateInventoryWarn();
+      updateDevicePolicyNote();
+      updateModalModeUI();
       renderContactModal();
     }
 
@@ -808,8 +1002,11 @@
 
     function applyUsageStatus(usage) {
       if (!usage) return;
+      currentUsage = usage;
       els.usageText.textContent = usage.message || "免费试用 · 每日 3 次";
       els.activateBtn.classList.toggle("hidden", usage.isPro);
+      const upgradeBtn = document.getElementById("upgradeBtn");
+      if (upgradeBtn) upgradeBtn.classList.toggle("hidden", !(usage.isPro && usage.canUpgrade));
       const showPricing = !usage.isPro && usage.remaining === 0 && usage.pricingHint;
       if (els.pricingHint) {
         els.pricingHint.textContent = showPricing ? usage.pricingHint : "";
@@ -836,13 +1033,44 @@
       }
     }
 
-    els.activateBtn.onclick = () => {
-      renderPricingCards();
-      els.activationCodeInput.value = "";
-      els.activateModal.classList.add("show");
-      els.activationCodeInput.focus();
-    };
+    els.activateBtn.onclick = openPurchaseModal;
+    document.getElementById("upgradeBtn").onclick = openUpgradeModal;
     document.getElementById("activateCancelBtn").onclick = () => els.activateModal.classList.remove("show");
+    document.getElementById("claimActivateBtn").onclick = async () => {
+      const btn = document.getElementById("claimActivateBtn");
+      if (!selectedPlanId) {
+        alert(modalMode === "upgrade" ? "请选择升级套餐" : "请选择套餐");
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = modalMode === "upgrade" ? "升级中..." : "领取中...";
+      try {
+        const endpoint = modalMode === "upgrade" ? "/api/upgrade" : "/api/purchase";
+        const r = await fetch(`${API}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, planId: selectedPlanId }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        if (modalMode === "upgrade") {
+          els.activateModal.classList.remove("show");
+          modalMode = "purchase";
+          await refreshUsage();
+          toast(d.message || "套餐升级成功");
+        } else {
+          showRevealedCode(d.code || "", d.message || "会员已开通");
+          await refreshUsage();
+          toast(d.message || "会员已开通");
+          renderPricingCards();
+        }
+      } catch (e) {
+        alert(e.message || (modalMode === "upgrade" ? "升级失败" : "领取失败"));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = modalMode === "upgrade" ? "我已完成补差价，立即升级" : "我已完成付款，领取激活码并开通";
+      }
+    };
     document.getElementById("activateSubmitBtn").onclick = async () => {
       const code = els.activationCodeInput.value.trim();
       if (!code) {
@@ -867,7 +1095,7 @@
         alert(e.message || "开通失败");
       } finally {
         btn.disabled = false;
-        btn.textContent = "确认开通";
+        btn.textContent = "手动激活";
       }
     };
     els.activateModal.onclick = (e) => {

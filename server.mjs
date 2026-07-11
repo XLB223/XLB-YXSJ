@@ -4,7 +4,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
-import { handleGenerateRequest, getUsageStatus, activateDevice, purchasePlan } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice, claimAndActivate, getActivationInventory, upgradePlan } from "./api/generate-handler.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -81,7 +81,10 @@ async function handleRequest(req, res) {
   }
 
   if (url === "/api/pricing") {
-    sendJson(res, 200, getPurchaseInfo(env));
+    sendJson(res, 200, {
+      ...getPurchaseInfo(env),
+      activationInventory: getActivationInventory(env),
+    });
     return;
   }
 
@@ -100,7 +103,7 @@ async function handleRequest(req, res) {
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
-      const result = purchasePlan(payload.deviceId, payload.planId, env);
+      const result = claimAndActivate(payload.deviceId, payload.planId, env);
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, error.status || 500, { error: error.message || "开通失败" });
@@ -109,6 +112,23 @@ async function handleRequest(req, res) {
   }
 
   if (url === "/api/purchase") {
+    sendJson(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  if (url === "/api/upgrade" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      const result = upgradePlan(payload.deviceId, payload.planId, env);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || "升级失败" });
+    }
+    return;
+  }
+
+  if (url === "/api/upgrade") {
     sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
