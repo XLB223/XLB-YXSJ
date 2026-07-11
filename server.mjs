@@ -14,14 +14,19 @@ const HOST = "0.0.0.0";
 
 function loadEnv() {
   const env = { ...process.env };
+  const envPath = path.join(__dirname, ".env");
   try {
-    const lines = fs.readFileSync(path.join(__dirname, ".env"), "utf8").split("\n");
+    let raw = fs.readFileSync(envPath, "utf8");
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    const lines = raw.split(/\r?\n/);
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
       const idx = trimmed.indexOf("=");
       if (idx === -1) continue;
-      env[trimmed.slice(0, idx).trim()] = trimmed.slice(idx + 1).trim();
+      const key = trimmed.slice(0, idx).trim();
+      const value = trimmed.slice(idx + 1).trim();
+      if (key) env[key] = value;
     }
   } catch {
     // .env is optional if env var is set elsewhere
@@ -70,6 +75,8 @@ async function handleRequest(req, res) {
       hasApiKey: Boolean(env.DEEPSEEK_API_KEY),
       hasActivationCodes: Boolean(env.ACTIVATION_CODES_MONTH || env.ACTIVATION_CODES_HALF || env.ACTIVATION_CODES_YEAR || env.ACTIVATION_CODES),
       hasUpgradeCodes: Boolean(env.UPGRADE_CODES_HALF || env.UPGRADE_CODES_YEAR),
+      envFile: path.join(__dirname, ".env"),
+      envFileExists: fs.existsSync(path.join(__dirname, ".env")),
       cwd: process.cwd(),
       message: env.DEEPSEEK_API_KEY
         ? "服务器运行正常"
