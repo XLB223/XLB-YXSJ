@@ -44,7 +44,7 @@ export function getPurchaseInfo(env = process.env) {
   return {
     plans: PRICING_PLANS,
     siteUrl,
-    contact: contact || "如有问题请点击页面左侧「联系客服」",
+    contact: contact || "付款后请点击左侧「联系客服」，发送付款截图获取激活码",
     contactService: {
       wechatQr: (env.CONTACT_WECHAT_QR || "/assets/payment/wechat-service.png").trim(),
       wechatId,
@@ -55,7 +55,7 @@ export function getPurchaseInfo(env = process.env) {
     payment: {
       wechatQr: (env.PAYMENT_WECHAT_QR || "/assets/payment/wechat-pay.png").trim(),
       alipayQr: (env.PAYMENT_ALIPAY_QR || "/assets/payment/alipay-pay.png").trim(),
-      note: "选择套餐后扫码支付，完成付款点击下方「立即开通」",
+      note: "先选择套餐并扫码支付，再联系客服获取激活码（不同套餐激活码不同）",
     },
     freeDailyLimit: FREE_DAILY_LIMIT,
     trialNote: "免费试用每天 3 次，试用结束后可扫码开通会员",

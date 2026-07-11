@@ -201,20 +201,12 @@ export function activateDevice(deviceId, code, env = process.env) {
 }
 
 export function purchasePlan(deviceId, planId, env = process.env) {
-  if (!deviceId?.trim()) {
-    const error = new Error("缺少设备标识");
-    error.status = 400;
-    throw error;
-  }
-
-  const normalizedPlanId = String(planId || "").trim();
-  if (!getPlanById(normalizedPlanId)) {
-    const error = new Error("请选择有效的会员套餐");
-    error.status = 400;
-    throw error;
-  }
-
-  return applyPlanToDevice(deviceId, normalizedPlanId, { source: "purchase" });
+  const error = new Error(
+    "当前未接入支付回调，无法自动开通。请付款后点击左侧「联系客服」获取激活码，或在弹窗内输入激活码。"
+  );
+  error.status = 403;
+  error.code = "PURCHASE_DISABLED";
+  throw error;
 }
 
 function applyPlanToDevice(deviceId, planId, meta = {}) {
@@ -253,7 +245,7 @@ export function assertCanGenerate(deviceId, env = process.env) {
   const status = getUsageStatus(deviceId, env);
   if (status.remaining <= 0) {
     const error = new Error(
-      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，付款后即可无限生成。`
+      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，付款后联系客服获取激活码。`
     );
     error.status = 402;
     error.code = "DAILY_LIMIT_REACHED";
