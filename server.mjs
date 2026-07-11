@@ -234,7 +234,12 @@ async function handleRequest(req, res) {
       ".webp": "image/webp",
     };
 
-    res.writeHead(200, { "Content-Type": types[ext] || "text/plain; charset=utf-8" });
+    const headers = { "Content-Type": types[ext] || "text/plain; charset=utf-8" };
+    if (ext === ".html") {
+      headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+    }
+
+    res.writeHead(200, headers);
     res.end(data);
   });
 }

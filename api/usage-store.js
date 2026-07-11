@@ -33,6 +33,14 @@ function parseCodeList(raw) {
     .filter(Boolean);
 }
 
+function isPoolActivationCode(code, env = process.env) {
+  const normalized = String(code || "").trim();
+  for (const planId of ["month", "half", "year"]) {
+    if (getCodeListsForPlan(planId, env).includes(normalized)) return true;
+  }
+  return false;
+}
+
 function getCodeListsForPlan(planId, env = process.env) {
   const tierMap = {
     month: parseCodeList(env.ACTIVATION_CODES_MONTH),
@@ -291,6 +299,12 @@ export function activateDevice(deviceId, code, env = process.env) {
     throw error;
   }
 
+  if (isPoolActivationCode(normalized, env) && pending?.code !== normalized) {
+    const error = new Error("请先在上方点击「获取邀请码」，再将显示的邀请码填入下方并确认开通");
+    error.status = 403;
+    throw error;
+  }
+
   assertCodeAvailableForDevice(deviceId, normalized, store);
   const result = applyPlanToDevice(deviceId, planId, { source: "code", code: normalized }, env);
   const after = loadStore();
@@ -427,6 +441,7 @@ export function claimPurchaseCode(deviceId, planId, env = process.env) {
     planId: normalizedPlanId,
     planName: plan.name,
     alreadyClaimed: false,
+    activated: false,
     message: `付款后请复制邀请码 ${code}，填入下方输入框并点击「输入邀请码并开通」`,
   };
 }
@@ -550,6 +565,7 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
       planName: targetPlan.name,
       diffLabel: formatMoney(diffPrice),
       alreadyClaimed: true,
+      upgraded: false,
       message: `您的升级邀请码：${existingPending.code}。请填入下方输入框并点击「输入邀请码并升级」`,
     };
   }
@@ -572,9 +588,6 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
   }
 
   const code = available[0];
-  if (!store.usedUpgradeCodes.includes(code)) {
-    store.usedUpgradeCodes.push(code);
-  }
   store.pendingUpgradeClaims[deviceId] = {
     code,
     targetPlanId: normalizedTargetId,
@@ -589,6 +602,7 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
     planName: targetPlan.name,
     diffLabel: formatMoney(diffPrice),
     alreadyClaimed: false,
+    upgraded: false,
     message: `补差价 ${formatMoney(diffPrice)} 后请复制升级邀请码 ${code}，填入下方并点击「输入邀请码并升级」`,
   };
 }
@@ -630,8 +644,12 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
     error.status = 403;
     throw error;
   }
-  if (pending?.code !== normalizedCode && getUsedUpgradeCodesSet(store).has(normalizedCode)) {
-    const error = new Error("该升级邀请码已被使用");
+  if (
+    !pending ||
+    pending.code !== normalizedCode ||
+    pending.targetPlanId !== normalizedTargetId
+  ) {
+    const error = new Error("请先在上方点击「获取升级邀请码」，再将显示的邀请码填入下方并确认升级");
     error.status = 403;
     throw error;
   }

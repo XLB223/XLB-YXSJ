@@ -837,6 +837,7 @@
     let currentUsage = null;
     let modalMode = "purchase";
     let selectedPlanId = "half";
+    let pendingRevealedCode = null;
 
     function getModalPlans() {
       const fallback = [
@@ -941,20 +942,31 @@
       noteEl.textContent = "提示：每个邀请码仅限一台电脑使用，不可共享";
     }
 
+    function updateConfirmInviteState() {
+      const btn = document.getElementById("confirmInviteBtn");
+      if (!btn || !els.inviteCodeInput) return;
+      const val = els.inviteCodeInput.value.trim();
+      btn.disabled = pendingRevealedCode ? val !== pendingRevealedCode : false;
+    }
+
     function showRevealedCode(code, message) {
       const box = document.getElementById("revealedCodeBox");
       const codeEl = document.getElementById("revealedCodeText");
       const msgEl = document.getElementById("revealedCodeMessage");
       if (!box || !codeEl || !msgEl) return;
+      pendingRevealedCode = code || null;
       codeEl.textContent = code || "";
       msgEl.textContent = message || "";
       box.classList.toggle("hidden", !code);
-      if (code && els.inviteCodeInput) els.inviteCodeInput.value = code;
+      if (els.inviteCodeInput) els.inviteCodeInput.value = "";
+      updateConfirmInviteState();
     }
 
     function resetActivateModalView() {
+      pendingRevealedCode = null;
       showRevealedCode("", "");
       if (els.inviteCodeInput) els.inviteCodeInput.value = "";
+      updateConfirmInviteState();
     }
 
     function updatePaymentNote(plans = getModalPlans()) {
@@ -1100,7 +1112,7 @@
           return;
         }
         showRevealedCode(d.code || "", d.message || "请填入下方邀请码并开通");
-        toast("邀请码已生成，请填入下方并确认开通");
+        toast("邀请码已生成，请手动填入下方输入框后再点「输入邀请码并开通」");
       } catch (e) {
         alert(e.message || "获取邀请码失败");
       } finally {
@@ -1125,7 +1137,7 @@
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
         showRevealedCode(d.code || "", d.message || "请填入下方邀请码并升级");
-        toast("升级邀请码已生成，请填入下方并确认升级");
+        toast("升级邀请码已生成，请手动填入下方输入框后再点「输入邀请码并升级」");
       } catch (e) {
         alert(e.message || "获取升级邀请码失败");
       } finally {
@@ -1137,6 +1149,10 @@
       const code = els.inviteCodeInput?.value.trim();
       if (!code) {
         alert("请输入邀请码");
+        return;
+      }
+      if (pendingRevealedCode && code !== pendingRevealedCode) {
+        alert("请输入上方显示的邀请码");
         return;
       }
       const btn = document.getElementById("confirmInviteBtn");
@@ -1178,6 +1194,7 @@
     els.activateModal.onclick = (e) => {
       if (e.target === els.activateModal) els.activateModal.classList.remove("show");
     };
+    els.inviteCodeInput?.addEventListener("input", updateConfirmInviteState);
     refreshUsage();
 
     function showStatus(msg, type = "error") {
