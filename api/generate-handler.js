@@ -8,6 +8,8 @@ import {
   claimAndActivate,
   getActivationInventory,
   upgradePlan,
+  adminUpgradePlan,
+  getUpgradeInventory,
 } from "./usage-store.js";
 import {
   CATEGORY_LIMITS,
@@ -16,7 +18,7 @@ import {
   postProcessListing,
 } from "./listing-utils.js";
 
-export { getUsageStatus, activateDevice, purchasePlan, claimAndActivate, getActivationInventory, upgradePlan };
+export { getUsageStatus, activateDevice, purchasePlan, claimAndActivate, getActivationInventory, upgradePlan, adminUpgradePlan, getUpgradeInventory };
 
 const DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions";
 const BATCH_SIZE = 4;

@@ -88,17 +88,18 @@ function getUsedCodesSet(store) {
 function loadStore() {
   try {
     if (!fs.existsSync(USAGE_FILE)) {
-      return { devices: {}, proDevices: {}, usedActivationCodes: [], claimAttempts: {} };
+      return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], claimAttempts: {} };
     }
     const raw = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8"));
     return {
       devices: raw.devices || {},
       proDevices: raw.proDevices || {},
       usedActivationCodes: raw.usedActivationCodes || [],
+      usedUpgradeCodes: raw.usedUpgradeCodes || [],
       claimAttempts: raw.claimAttempts || {},
     };
   } catch {
-    return { devices: {}, proDevices: {}, usedActivationCodes: [], claimAttempts: {} };
+    return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], claimAttempts: {} };
   }
 }
 
@@ -378,22 +379,34 @@ export function purchasePlan(deviceId, planId, env = process.env) {
   return claimAndActivate(deviceId, planId, env);
 }
 
-export function upgradePlan(deviceId, targetPlanId, env = process.env) {
-  if (!deviceId?.trim()) {
-    const error = new Error("缺少设备标识");
-    error.status = 400;
-    throw error;
-  }
+function getUpgradeCodeList(targetPlanId, env = process.env) {
+  const tierMap = {
+    half: parseCodeList(env.UPGRADE_CODES_HALF),
+    year: parseCodeList(env.UPGRADE_CODES_YEAR),
+  };
+  return tierMap[targetPlanId] || [];
+}
 
-  const normalizedTargetId = String(targetPlanId || "").trim();
-  const targetPlan = getPlanById(normalizedTargetId);
-  if (!targetPlan) {
-    const error = new Error("请选择有效的升级套餐");
-    error.status = 400;
-    throw error;
-  }
+function resolveUpgradeCodeTarget(code, env = process.env) {
+  const normalized = String(code || "").trim();
+  if (!normalized) return null;
 
-  const store = loadStore();
+  for (const planId of ["half", "year"]) {
+    if (getUpgradeCodeList(planId, env).includes(normalized)) return planId;
+  }
+  return null;
+}
+
+function getUsedUpgradeCodesSet(store) {
+  const used = new Set(store.usedUpgradeCodes || []);
+  for (const record of Object.values(store.proDevices || {})) {
+    if (record?.upgradeCode) used.add(record.upgradeCode);
+  }
+  return used;
+}
+
+function applyUpgradeToDevice(deviceId, targetPlanId, store, meta = {}) {
+  const targetPlan = getPlanById(targetPlanId);
   const proRecord = getActiveProRecord(deviceId, store);
   if (!proRecord) {
     const error = new Error("当前不是会员，请先开通会员");
@@ -402,14 +415,12 @@ export function upgradePlan(deviceId, targetPlanId, env = process.env) {
   }
 
   const currentPlanId = proRecord.plan || "year";
-  const diffPrice = calculateUpgradePrice(currentPlanId, normalizedTargetId);
+  const diffPrice = calculateUpgradePrice(currentPlanId, targetPlanId);
   if (diffPrice == null) {
     const error = new Error("只能升级到更高档位套餐");
     error.status = 400;
     throw error;
   }
-
-  assertCanClaim(deviceId, store);
 
   const now = new Date();
   const expiresAt = new Date(now);
@@ -417,7 +428,7 @@ export function upgradePlan(deviceId, targetPlanId, env = process.env) {
 
   store.proDevices[deviceId] = {
     ...proRecord,
-    plan: normalizedTargetId,
+    plan: targetPlanId,
     upgradedAt: now.toISOString(),
     upgradedFrom: currentPlanId,
     upgradePaidDiff: diffPrice,
@@ -425,18 +436,143 @@ export function upgradePlan(deviceId, targetPlanId, env = process.env) {
     expiresAt: expiresAt.toISOString(),
     source: "upgrade",
     code: proRecord.code,
+    ...meta,
   };
-  recordClaimAttempt(deviceId, store);
-  saveStore(store);
 
   const currentPlan = getPlanById(currentPlanId);
   return {
+    currentPlan,
+    targetPlan,
+    diffPrice,
+    expiresAt: expiresAt.toISOString(),
+  };
+}
+
+export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.env) {
+  if (!deviceId?.trim()) {
+    const error = new Error("缺少设备标识");
+    error.status = 400;
+    throw error;
+  }
+
+  const normalizedTargetId = String(targetPlanId || "").trim();
+  const normalizedCode = String(upgradeCode || "").trim();
+  if (!normalizedCode) {
+    const error = new Error("请输入升级码。付款补差价后请联系客服获取");
+    error.status = 400;
+    throw error;
+  }
+
+  const codeTargetPlanId = resolveUpgradeCodeTarget(normalizedCode, env);
+  if (!codeTargetPlanId) {
+    const error = new Error("升级码无效，请检查后重试或联系客服");
+    error.status = 403;
+    throw error;
+  }
+  if (codeTargetPlanId !== normalizedTargetId) {
+    const targetPlan = getPlanById(normalizedTargetId);
+    const error = new Error(`该升级码仅可用于升级为${getPlanById(codeTargetPlanId)?.name || "对应套餐"}，请重新选择套餐`);
+    error.status = 400;
+    throw error;
+  }
+
+  const configuredCodes = getUpgradeCodeList(normalizedTargetId, env);
+  if (!configuredCodes.length) {
+    const error = new Error("服务器未配置升级码，请联系管理员");
+    error.status = 503;
+    throw error;
+  }
+
+  const store = loadStore();
+  const usedUpgradeCodes = getUsedUpgradeCodesSet(store);
+  if (usedUpgradeCodes.has(normalizedCode)) {
+    const error = new Error("该升级码已被使用");
+    error.status = 403;
+    throw error;
+  }
+
+  assertCanClaim(deviceId, store);
+
+  const result = applyUpgradeToDevice(deviceId, normalizedTargetId, store, {
+    upgradeCode: normalizedCode,
+  });
+  if (!store.usedUpgradeCodes.includes(normalizedCode)) {
+    store.usedUpgradeCodes.push(normalizedCode);
+  }
+  recordClaimAttempt(deviceId, store);
+  saveStore(store);
+
+  return {
     ...getUsageStatus(deviceId, env),
     upgraded: true,
-    upgradeDiff: diffPrice,
-    upgradeDiffLabel: formatMoney(diffPrice),
-    message: `已从${currentPlan?.name || "原套餐"}升级为${targetPlan.name}（补差价 ${formatMoney(diffPrice)}），有效期至 ${formatDate(expiresAt.toISOString())}`,
+    upgradeDiff: result.diffPrice,
+    upgradeDiffLabel: formatMoney(result.diffPrice),
+    message: `已从${result.currentPlan?.name || "原套餐"}升级为${result.targetPlan.name}（补差价 ${formatMoney(result.diffPrice)}），有效期至 ${formatDate(result.expiresAt)}`,
   };
+}
+
+export function adminUpgradePlan(lookup, targetPlanId, env = process.env) {
+  const normalizedTargetId = String(targetPlanId || "").trim();
+  if (!getPlanById(normalizedTargetId)) {
+    const error = new Error("请选择有效的升级套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  const store = loadStore();
+  const key = String(lookup || "").trim();
+  let deviceId = null;
+
+  if (store.proDevices[key]) {
+    deviceId = key;
+  } else {
+    for (const [id, record] of Object.entries(store.proDevices || {})) {
+      if (record?.code === key) {
+        deviceId = id;
+        break;
+      }
+    }
+  }
+
+  if (!deviceId) {
+    const error = new Error(`未找到设备或激活码 ${key} 的会员记录`);
+    error.status = 404;
+    throw error;
+  }
+
+  const result = applyUpgradeToDevice(deviceId, normalizedTargetId, store, {
+    upgradeCode: null,
+    source: "admin-upgrade",
+  });
+  saveStore(store);
+
+  return {
+    deviceId,
+    activationCode: store.proDevices[deviceId]?.code || null,
+    ...getUsageStatus(deviceId, env),
+    upgraded: true,
+    message: `已手动升级为${result.targetPlan.name}（补差价 ${formatMoney(result.diffPrice)}），有效期至 ${formatDate(result.expiresAt)}`,
+  };
+}
+
+export function getUpgradeInventory(env = process.env) {
+  const store = loadStore();
+  const used = getUsedUpgradeCodesSet(store);
+  const plans = ["half", "year"];
+  const inventory = {};
+  let configured = false;
+
+  for (const planId of plans) {
+    const codes = getUpgradeCodeList(planId, env);
+    if (codes.length) configured = true;
+    inventory[planId] = {
+      total: codes.length,
+      available: codes.filter((code) => !used.has(code)).length,
+      ready: codes.length > 0,
+    };
+  }
+
+  return { configured, plans: inventory };
 }
 
 function applyPlanToDevice(deviceId, planId, meta = {}, env = process.env) {

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test:api": "node test-api.mjs",
     "codes:list": "node scripts/list-codes.mjs",
-    "codes:unbind": "node scripts/unbind-code.mjs"
+    "codes:unbind": "node scripts/unbind-code.mjs",
+    "codes:upgrade": "node scripts/upgrade-plan.mjs"
   },
   "devDependencies": {
     "vite": "^6.3.5"

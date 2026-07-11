@@ -4,7 +4,7 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
-import { handleGenerateRequest, getUsageStatus, activateDevice, claimAndActivate, getActivationInventory, upgradePlan } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice, claimAndActivate, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -84,6 +84,7 @@ async function handleRequest(req, res) {
     sendJson(res, 200, {
       ...getPurchaseInfo(env),
       activationInventory: getActivationInventory(env),
+      upgradeInventory: getUpgradeInventory(env),
     });
     return;
   }
@@ -120,7 +121,7 @@ async function handleRequest(req, res) {
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
-      const result = upgradePlan(payload.deviceId, payload.planId, env);
+      const result = upgradePlan(payload.deviceId, payload.planId, payload.upgradeCode, env);
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, error.status || 500, { error: error.message || "升级失败" });

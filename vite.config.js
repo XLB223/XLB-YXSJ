@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from "vite";
-import { handleGenerateRequest, getUsageStatus, activateDevice, claimAndActivate, getActivationInventory, upgradePlan } from "./api/generate-handler.js";
+import { handleGenerateRequest, getUsageStatus, activateDevice, claimAndActivate, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => {
                 JSON.stringify({
                   ...getPurchaseInfo(env),
                   activationInventory: getActivationInventory(env),
+                  upgradeInventory: getUpgradeInventory(env),
                 })
               );
               return;
@@ -119,7 +120,7 @@ export default defineConfig(({ mode }) => {
               req.on("end", () => {
                 try {
                   const payload = body ? JSON.parse(body) : {};
-                  const result = upgradePlan(payload.deviceId, payload.planId, env);
+                  const result = upgradePlan(payload.deviceId, payload.planId, payload.upgradeCode, env);
                   res.statusCode = 200;
                   res.setHeader("Content-Type", "application/json; charset=utf-8");
                   res.end(JSON.stringify(result));

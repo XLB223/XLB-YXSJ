@@ -133,6 +133,34 @@
     }
     .current-plan-banner.hidden { display: none; }
     .purchase-only.hidden { display: none !important; }
+    .upgrade-only.hidden { display: none !important; }
+    .upgrade-code-block {
+      margin-bottom: 12px;
+      padding: 12px;
+      border: 1px dashed #93c5fd;
+      border-radius: 10px;
+      background: #f8fbff;
+    }
+    .upgrade-code-block label {
+      display: block;
+      font-size: .76rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .upgrade-code-block input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: .88rem;
+    }
+    .device-id-hint {
+      font-size: .72rem;
+      color: var(--muted);
+      margin-top: 8px;
+      line-height: 1.45;
+      word-break: break-all;
+    }
     .modal-overlay {
       display: none;
       position: fixed;
@@ -735,9 +763,15 @@
           <button type="button" class="btn-submit" id="activateSubmitBtn" style="flex:1">手动激活</button>
         </div>
       </details>
+      <div class="upgrade-code-block upgrade-only hidden" id="upgradeCodeBlock">
+        <label for="upgradeCodeInput">升级码（付款补差价后联系客服获取）</label>
+        <input type="text" id="upgradeCodeInput" placeholder="请输入客服提供的升级码" autocomplete="off" />
+        <p class="device-id-hint">联系客服时请说明要升级的套餐，并附上付款截图。设备编号：<span id="deviceIdHint"></span></p>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
-        <button type="button" class="btn-submit" id="claimActivateBtn">我已完成付款，领取激活码并开通</button>
+        <button type="button" class="btn-submit purchase-only" id="claimActivateBtn">我已完成付款，领取激活码并开通</button>
+        <button type="button" class="btn-submit upgrade-only hidden" id="upgradeSubmitBtn">输入升级码并升级</button>
       </div>
     </div>
   </div>
@@ -816,13 +850,14 @@
       const isUpgrade = modalMode === "upgrade";
       const titleEl = document.getElementById("activateModalTitle");
       const bannerEl = document.getElementById("currentPlanBanner");
-      const claimBtn = document.getElementById("claimActivateBtn");
       const noteEl = document.getElementById("pricingTrialNote");
+      const deviceHintEl = document.getElementById("deviceIdHint");
       document.querySelectorAll(".purchase-only").forEach((el) => el.classList.toggle("hidden", isUpgrade));
+      document.querySelectorAll(".upgrade-only").forEach((el) => el.classList.toggle("hidden", !isUpgrade));
       if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
       if (noteEl) {
         noteEl.textContent = isUpgrade
-          ? "补差价即可升级到更高档位，升级后按新套餐时长重新计算有效期"
+          ? "请先扫码支付补差价，再联系客服获取升级码；没有升级码无法自动升级"
           : purchaseInfo?.trialNote || "免费试用每天 3 次，试用结束后可开通会员。";
       }
       if (bannerEl) {
@@ -833,7 +868,7 @@
           bannerEl.classList.add("hidden");
         }
       }
-      if (claimBtn) claimBtn.textContent = isUpgrade ? "我已完成补差价，立即升级" : "我已完成付款，领取激活码并开通";
+      if (deviceHintEl) deviceHintEl.textContent = deviceId;
     }
 
     function openPurchaseModal() {
@@ -912,6 +947,8 @@
     function resetActivateModalView() {
       showRevealedCode("", "");
       if (els.activationCodeInput) els.activationCodeInput.value = "";
+      const upgradeInput = document.getElementById("upgradeCodeInput");
+      if (upgradeInput) upgradeInput.value = "";
     }
 
     function updatePaymentNote(plans = getModalPlans()) {
@@ -1039,36 +1076,60 @@
     document.getElementById("claimActivateBtn").onclick = async () => {
       const btn = document.getElementById("claimActivateBtn");
       if (!selectedPlanId) {
-        alert(modalMode === "upgrade" ? "请选择升级套餐" : "请选择套餐");
+        alert("请选择套餐");
         return;
       }
       btn.disabled = true;
-      btn.textContent = modalMode === "upgrade" ? "升级中..." : "领取中...";
+      btn.textContent = "领取中...";
       try {
-        const endpoint = modalMode === "upgrade" ? "/api/upgrade" : "/api/purchase";
-        const r = await fetch(`${API}${endpoint}`, {
+        const r = await fetch(`${API}/api/purchase`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId, planId: selectedPlanId }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        if (modalMode === "upgrade") {
-          els.activateModal.classList.remove("show");
-          modalMode = "purchase";
-          await refreshUsage();
-          toast(d.message || "套餐升级成功");
-        } else {
-          showRevealedCode(d.code || "", d.message || "会员已开通");
-          await refreshUsage();
-          toast(d.message || "会员已开通");
-          renderPricingCards();
-        }
+        showRevealedCode(d.code || "", d.message || "会员已开通");
+        await refreshUsage();
+        toast(d.message || "会员已开通");
+        renderPricingCards();
       } catch (e) {
-        alert(e.message || (modalMode === "upgrade" ? "升级失败" : "领取失败"));
+        alert(e.message || "领取失败");
       } finally {
         btn.disabled = false;
-        btn.textContent = modalMode === "upgrade" ? "我已完成补差价，立即升级" : "我已完成付款，领取激活码并开通";
+        btn.textContent = "我已完成付款，领取激活码并开通";
+      }
+    };
+    document.getElementById("upgradeSubmitBtn").onclick = async () => {
+      const upgradeCode = document.getElementById("upgradeCodeInput")?.value.trim();
+      if (!selectedPlanId) {
+        alert("请选择升级套餐");
+        return;
+      }
+      if (!upgradeCode) {
+        alert("请输入升级码。付款补差价后请联系客服获取");
+        return;
+      }
+      const btn = document.getElementById("upgradeSubmitBtn");
+      btn.disabled = true;
+      btn.textContent = "升级中...";
+      try {
+        const r = await fetch(`${API}/api/upgrade`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, planId: selectedPlanId, upgradeCode }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        els.activateModal.classList.remove("show");
+        modalMode = "purchase";
+        await refreshUsage();
+        toast(d.message || "套餐升级成功");
+      } catch (e) {
+        alert(e.message || "升级失败");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "输入升级码并升级";
       }
     };
     document.getElementById("activateSubmitBtn").onclick = async () => {
