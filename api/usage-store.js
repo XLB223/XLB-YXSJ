@@ -55,15 +55,39 @@ function getCodeOwnerDeviceId(store, code) {
   return null;
 }
 
+function getPendingClaimByCode(store, code) {
+  const normalized = String(code || "").trim();
+  for (const [deviceId, claim] of Object.entries(store.pendingClaims || {})) {
+    if (claim?.code === normalized) return { deviceId, ...claim };
+  }
+  return null;
+}
+
+function getPendingUpgradeClaimByCode(store, code) {
+  const normalized = String(code || "").trim();
+  for (const [deviceId, claim] of Object.entries(store.pendingUpgradeClaims || {})) {
+    if (claim?.code === normalized) return { deviceId, ...claim };
+  }
+  return null;
+}
+
 function assertCodeAvailableForDevice(deviceId, code, store) {
   const normalized = String(code || "").trim();
   const owner = getCodeOwnerDeviceId(store, normalized);
 
   if (owner) {
     if (owner !== deviceId) {
-      const error = new Error(
-        "该激活码已在其他设备使用，一码仅限一台设备。请为本机单独购买或联系客服"
-      );
+      const error = new Error("该邀请码已在其他设备使用，一码仅限一台设备");
+      error.status = 403;
+      throw error;
+    }
+    return;
+  }
+
+  const pending = getPendingClaimByCode(store, normalized);
+  if (pending) {
+    if (pending.deviceId !== deviceId) {
+      const error = new Error("该邀请码已在其他设备领取");
       error.status = 403;
       throw error;
     }
@@ -71,7 +95,7 @@ function assertCodeAvailableForDevice(deviceId, code, store) {
   }
 
   if (store.usedActivationCodes?.includes(normalized)) {
-    const error = new Error("该激活码已被使用，一码仅限一台设备");
+    const error = new Error("该邀请码已被使用，一码仅限一台设备");
     error.status = 403;
     throw error;
   }
@@ -82,13 +106,16 @@ function getUsedCodesSet(store) {
   for (const record of Object.values(store.proDevices || {})) {
     if (record?.code) used.add(record.code);
   }
+  for (const claim of Object.values(store.pendingClaims || {})) {
+    if (claim?.code) used.add(claim.code);
+  }
   return used;
 }
 
 function loadStore() {
   try {
     if (!fs.existsSync(USAGE_FILE)) {
-      return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], claimAttempts: {} };
+      return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], pendingClaims: {}, pendingUpgradeClaims: {}, claimAttempts: {} };
     }
     const raw = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8"));
     return {
@@ -96,10 +123,12 @@ function loadStore() {
       proDevices: raw.proDevices || {},
       usedActivationCodes: raw.usedActivationCodes || [],
       usedUpgradeCodes: raw.usedUpgradeCodes || [],
+      pendingClaims: raw.pendingClaims || {},
+      pendingUpgradeClaims: raw.pendingUpgradeClaims || {},
       claimAttempts: raw.claimAttempts || {},
     };
   } catch {
-    return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], claimAttempts: {} };
+    return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], pendingClaims: {}, pendingUpgradeClaims: {}, claimAttempts: {} };
   }
 }
 
@@ -245,21 +274,34 @@ export function activateDevice(deviceId, code, env = process.env) {
 
   const normalized = String(code || "").trim();
   if (!normalized) {
-    const error = new Error("请输入激活码");
+    const error = new Error("请输入邀请码");
     error.status = 400;
     throw error;
   }
 
-  const planId = resolveCodePlan(normalized, env);
-  if (!planId) {
-    const error = new Error("激活码无效，请检查后重试");
+  const store = loadStore();
+  const pending = store.pendingClaims?.[deviceId];
+  let planId = resolveCodePlan(normalized, env);
+
+  if (pending?.code === normalized) {
+    planId = pending.planId;
+  } else if (!planId) {
+    const error = new Error("邀请码无效，请检查后重试");
     error.status = 403;
     throw error;
   }
 
-  const store = loadStore();
   assertCodeAvailableForDevice(deviceId, normalized, store);
-  return applyPlanToDevice(deviceId, planId, { source: "code", code: normalized }, env);
+  const result = applyPlanToDevice(deviceId, planId, { source: "code", code: normalized }, env);
+  const after = loadStore();
+  if (after.pendingClaims?.[deviceId]?.code === normalized) {
+    delete after.pendingClaims[deviceId];
+    saveStore(after);
+  }
+  return {
+    ...result,
+    message: `${result.planName}已开通，邀请码已绑定本设备，有效期至 ${formatDate(result.expiresAt)}`,
+  };
 }
 
 export function getActivationInventory(env = process.env) {
@@ -314,7 +356,7 @@ function assertCanClaim(deviceId, store) {
   }
 }
 
-export function claimAndActivate(deviceId, planId, env = process.env) {
+export function claimPurchaseCode(deviceId, planId, env = process.env) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");
     error.status = 400;
@@ -322,7 +364,8 @@ export function claimAndActivate(deviceId, planId, env = process.env) {
   }
 
   const normalizedPlanId = String(planId || "").trim();
-  if (!getPlanById(normalizedPlanId)) {
+  const plan = getPlanById(normalizedPlanId);
+  if (!plan) {
     const error = new Error("请选择有效的会员套餐");
     error.status = 400;
     throw error;
@@ -338,45 +381,62 @@ export function claimAndActivate(deviceId, planId, env = process.env) {
     };
   }
 
+  const store = loadStore();
+  const existingPending = store.pendingClaims?.[deviceId];
+  if (existingPending?.code && existingPending.planId === normalizedPlanId) {
+    return {
+      code: existingPending.code,
+      planId: normalizedPlanId,
+      planName: plan.name,
+      alreadyClaimed: true,
+      message: `您的邀请码：${existingPending.code}。请填入下方输入框并点击「输入邀请码并开通」`,
+    };
+  }
+
   const configuredCodes = getCodeListsForPlan(normalizedPlanId, env);
   if (!configuredCodes.length) {
-    const error = new Error(
-      "服务器未配置该套餐激活码，请联系管理员在 .env 中设置 ACTIVATION_CODES_* 后重启服务"
-    );
+    const error = new Error("服务器未配置该套餐邀请码，请联系管理员");
     error.status = 503;
     throw error;
   }
 
-  const store = loadStore();
   assertCanClaim(deviceId, store);
 
   const used = getUsedCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
   if (!available.length) {
-    const error = new Error("该套餐激活码已发完，请点击左侧「联系客服」");
+    const error = new Error("该套餐邀请码已发完，请换套餐或稍后再试");
     error.status = 503;
     throw error;
   }
 
   const code = available[0];
-  assertCodeAvailableForDevice(deviceId, code, store);
   if (!store.usedActivationCodes.includes(code)) {
     store.usedActivationCodes.push(code);
   }
+  store.pendingClaims[deviceId] = {
+    code,
+    planId: normalizedPlanId,
+    claimedAt: new Date().toISOString(),
+  };
   recordClaimAttempt(deviceId, store);
   saveStore(store);
 
-  const result = applyPlanToDevice(deviceId, normalizedPlanId, { source: "claim", code }, env);
   return {
-    ...result,
     code,
-    alreadyPro: false,
-    message: `${result.planName}已开通，激活码 ${code} 已绑定本设备（一码仅限一台电脑），有效期至 ${formatDate(result.expiresAt)}`,
+    planId: normalizedPlanId,
+    planName: plan.name,
+    alreadyClaimed: false,
+    message: `付款后请复制邀请码 ${code}，填入下方输入框并点击「输入邀请码并开通」`,
   };
 }
 
+export function claimAndActivate(deviceId, planId, env = process.env) {
+  return claimPurchaseCode(deviceId, planId, env);
+}
+
 export function purchasePlan(deviceId, planId, env = process.env) {
-  return claimAndActivate(deviceId, planId, env);
+  return claimPurchaseCode(deviceId, planId, env);
 }
 
 function getUpgradeCodeList(targetPlanId, env = process.env) {
@@ -401,6 +461,9 @@ function getUsedUpgradeCodesSet(store) {
   const used = new Set(store.usedUpgradeCodes || []);
   for (const record of Object.values(store.proDevices || {})) {
     if (record?.upgradeCode) used.add(record.upgradeCode);
+  }
+  for (const claim of Object.values(store.pendingUpgradeClaims || {})) {
+    if (claim?.code) used.add(claim.code);
   }
   return used;
 }
@@ -448,6 +511,88 @@ function applyUpgradeToDevice(deviceId, targetPlanId, store, meta = {}) {
   };
 }
 
+export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
+  if (!deviceId?.trim()) {
+    const error = new Error("缺少设备标识");
+    error.status = 400;
+    throw error;
+  }
+
+  const normalizedTargetId = String(targetPlanId || "").trim();
+  const targetPlan = getPlanById(normalizedTargetId);
+  if (!targetPlan) {
+    const error = new Error("请选择有效的升级套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  const store = loadStore();
+  const proRecord = getActiveProRecord(deviceId, store);
+  if (!proRecord) {
+    const error = new Error("当前不是会员，请先开通会员");
+    error.status = 403;
+    throw error;
+  }
+
+  const currentPlanId = proRecord.plan || "year";
+  const diffPrice = calculateUpgradePrice(currentPlanId, normalizedTargetId);
+  if (diffPrice == null) {
+    const error = new Error("只能升级到更高档位套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  const existingPending = store.pendingUpgradeClaims?.[deviceId];
+  if (existingPending?.code && existingPending.targetPlanId === normalizedTargetId) {
+    return {
+      code: existingPending.code,
+      planId: normalizedTargetId,
+      planName: targetPlan.name,
+      diffLabel: formatMoney(diffPrice),
+      alreadyClaimed: true,
+      message: `您的升级邀请码：${existingPending.code}。请填入下方输入框并点击「输入邀请码并升级」`,
+    };
+  }
+
+  const configuredCodes = getUpgradeCodeList(normalizedTargetId, env);
+  if (!configuredCodes.length) {
+    const error = new Error("服务器未配置升级邀请码，请联系管理员");
+    error.status = 503;
+    throw error;
+  }
+
+  assertCanClaim(deviceId, store);
+
+  const used = getUsedUpgradeCodesSet(store);
+  const available = configuredCodes.filter((code) => !used.has(code));
+  if (!available.length) {
+    const error = new Error("该套餐升级邀请码已发完，请稍后再试");
+    error.status = 503;
+    throw error;
+  }
+
+  const code = available[0];
+  if (!store.usedUpgradeCodes.includes(code)) {
+    store.usedUpgradeCodes.push(code);
+  }
+  store.pendingUpgradeClaims[deviceId] = {
+    code,
+    targetPlanId: normalizedTargetId,
+    claimedAt: new Date().toISOString(),
+  };
+  recordClaimAttempt(deviceId, store);
+  saveStore(store);
+
+  return {
+    code,
+    planId: normalizedTargetId,
+    planName: targetPlan.name,
+    diffLabel: formatMoney(diffPrice),
+    alreadyClaimed: false,
+    message: `补差价 ${formatMoney(diffPrice)} 后请复制升级邀请码 ${code}，填入下方并点击「输入邀请码并升级」`,
+  };
+}
+
 export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.env) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");
@@ -458,35 +603,35 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
   const normalizedTargetId = String(targetPlanId || "").trim();
   const normalizedCode = String(upgradeCode || "").trim();
   if (!normalizedCode) {
-    const error = new Error("请输入升级码。付款补差价后请联系客服获取");
+    const error = new Error("请输入升级邀请码。请先点击「获取升级邀请码」");
     error.status = 400;
     throw error;
   }
 
   const codeTargetPlanId = resolveUpgradeCodeTarget(normalizedCode, env);
   if (!codeTargetPlanId) {
-    const error = new Error("升级码无效，请检查后重试或联系客服");
+    const error = new Error("升级邀请码无效，请检查后重试");
     error.status = 403;
     throw error;
   }
   if (codeTargetPlanId !== normalizedTargetId) {
-    const targetPlan = getPlanById(normalizedTargetId);
-    const error = new Error(`该升级码仅可用于升级为${getPlanById(codeTargetPlanId)?.name || "对应套餐"}，请重新选择套餐`);
+    const error = new Error(
+      `该邀请码仅可用于升级为${getPlanById(codeTargetPlanId)?.name || "对应套餐"}，请重新选择套餐`
+    );
     error.status = 400;
     throw error;
   }
 
-  const configuredCodes = getUpgradeCodeList(normalizedTargetId, env);
-  if (!configuredCodes.length) {
-    const error = new Error("服务器未配置升级码，请联系管理员");
-    error.status = 503;
+  const store = loadStore();
+  const pending = store.pendingUpgradeClaims?.[deviceId];
+  const pendingByCode = getPendingUpgradeClaimByCode(store, normalizedCode);
+  if (pendingByCode && pendingByCode.deviceId !== deviceId) {
+    const error = new Error("该升级邀请码已在其他设备领取");
+    error.status = 403;
     throw error;
   }
-
-  const store = loadStore();
-  const usedUpgradeCodes = getUsedUpgradeCodesSet(store);
-  if (usedUpgradeCodes.has(normalizedCode)) {
-    const error = new Error("该升级码已被使用");
+  if (pending?.code !== normalizedCode && getUsedUpgradeCodesSet(store).has(normalizedCode)) {
+    const error = new Error("该升级邀请码已被使用");
     error.status = 403;
     throw error;
   }
@@ -498,6 +643,9 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
   });
   if (!store.usedUpgradeCodes.includes(normalizedCode)) {
     store.usedUpgradeCodes.push(normalizedCode);
+  }
+  if (store.pendingUpgradeClaims?.[deviceId]?.code === normalizedCode) {
+    delete store.pendingUpgradeClaims[deviceId];
   }
   recordClaimAttempt(deviceId, store);
   saveStore(store);
@@ -616,7 +764,7 @@ export function assertCanGenerate(deviceId, env = process.env) {
   const status = getUsageStatus(deviceId, env);
   if (status.remaining <= 0) {
     const error = new Error(
-      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，付款后联系客服获取激活码。`
+      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，付款后获取邀请码并填入开通。`
     );
     error.status = 402;
     error.code = "DAILY_LIMIT_REACHED";
@@ -667,6 +815,11 @@ export function unbindActivationCode(rawCode) {
 
   const hadUsedFlag = (store.usedActivationCodes || []).includes(code);
   store.usedActivationCodes = (store.usedActivationCodes || []).filter((item) => item !== code);
+  if (store.pendingClaims) {
+    for (const [deviceId, claim] of Object.entries(store.pendingClaims)) {
+      if (claim?.code === code) delete store.pendingClaims[deviceId];
+    }
+  }
 
   if (!removedDevices.length && !hadUsedFlag) {
     const error = new Error(`未找到激活码 ${code} 的绑定记录`);

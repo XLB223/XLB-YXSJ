@@ -362,6 +362,14 @@
     }
     .payment-site { text-align: center; font-size: .72rem; color: var(--primary); margin-bottom: 10px; }
     .activate-label { display: block; font-size: .78rem; font-weight: 500; margin-bottom: 6px; }
+    .invite-input-block { margin-bottom: 12px; }
+    .invite-input-block input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: .88rem;
+    }
     .modal-box input {
       width: 100%;
       padding: 12px;
@@ -749,29 +757,23 @@
       <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
       <div class="inventory-warn hidden purchase-only" id="inventoryWarn"></div>
       <p class="device-policy-note purchase-only" id="devicePolicyNote"></p>
-      <div class="revealed-code hidden purchase-only" id="revealedCodeBox">
-        <strong>开通成功</strong>
+      <div class="revealed-code hidden" id="revealedCodeBox">
+        <strong id="revealedCodeTitle">您的邀请码</strong>
         <span class="code-value" id="revealedCodeText"></span>
         <p id="revealedCodeMessage"></p>
       </div>
-      <p class="pricing-contact purchase-only" id="pricingContact">请先选择套餐并扫码支付，再点击下方按钮自动领取激活码并开通</p>
-      <details class="manual-code purchase-only">
-        <summary>已有激活码？点击手动输入</summary>
-        <label class="activate-label" for="activationCodeInput">激活码</label>
-        <input type="text" id="activationCodeInput" placeholder="请输入激活码" autocomplete="off" />
-        <div class="modal-actions" style="margin-top:10px">
-          <button type="button" class="btn-submit" id="activateSubmitBtn" style="flex:1">手动激活</button>
-        </div>
-      </details>
-      <div class="upgrade-code-block upgrade-only hidden" id="upgradeCodeBlock">
-        <label for="upgradeCodeInput">升级码（付款补差价后联系客服获取）</label>
-        <input type="text" id="upgradeCodeInput" placeholder="请输入客服提供的升级码" autocomplete="off" />
-        <p class="device-id-hint">联系客服时请说明要升级的套餐，并附上付款截图。设备编号：<span id="deviceIdHint"></span></p>
+      <div class="invite-input-block">
+        <label class="activate-label" for="inviteCodeInput">邀请码</label>
+        <input type="text" id="inviteCodeInput" placeholder="付款获取邀请码后，填入此处" autocomplete="off" />
+      </div>
+      <p class="pricing-contact purchase-only" id="pricingContact">选择套餐 → 扫码付款 → 获取邀请码 → 填入并开通</p>
+      <div class="modal-actions" style="margin-top:10px">
+        <button type="button" class="btn-submit purchase-only" id="claimInviteBtn" style="flex:1">我已完成付款，获取邀请码</button>
+        <button type="button" class="btn-submit upgrade-only hidden" id="claimUpgradeBtn" style="flex:1">我已完成补差价，获取升级邀请码</button>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
-        <button type="button" class="btn-submit purchase-only" id="claimActivateBtn">我已完成付款，领取激活码并开通</button>
-        <button type="button" class="btn-submit upgrade-only hidden" id="upgradeSubmitBtn">输入升级码并升级</button>
+        <button type="button" class="btn-submit" id="confirmInviteBtn">输入邀请码并开通</button>
       </div>
     </div>
   </div>
@@ -822,7 +824,7 @@
       planBar: document.getElementById("planBar"),
       activateBtn: document.getElementById("activateBtn"),
       activateModal: document.getElementById("activateModal"),
-      activationCodeInput: document.getElementById("activationCodeInput"),
+      inviteCodeInput: document.getElementById("inviteCodeInput"),
     };
 
     function toast(msg) {
@@ -851,14 +853,15 @@
       const titleEl = document.getElementById("activateModalTitle");
       const bannerEl = document.getElementById("currentPlanBanner");
       const noteEl = document.getElementById("pricingTrialNote");
-      const deviceHintEl = document.getElementById("deviceIdHint");
+      const confirmBtn = document.getElementById("confirmInviteBtn");
+      const revealedTitle = document.getElementById("revealedCodeTitle");
       document.querySelectorAll(".purchase-only").forEach((el) => el.classList.toggle("hidden", isUpgrade));
       document.querySelectorAll(".upgrade-only").forEach((el) => el.classList.toggle("hidden", !isUpgrade));
       if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
       if (noteEl) {
         noteEl.textContent = isUpgrade
-          ? "请先扫码支付补差价，再联系客服获取升级码；没有升级码无法自动升级"
-          : purchaseInfo?.trialNote || "免费试用每天 3 次，试用结束后可开通会员。";
+          ? "选择升级套餐 → 扫码付补差价 → 获取升级邀请码 → 填入并升级"
+          : purchaseInfo?.trialNote || "免费试用每天 3 次，付款后获取邀请码并填入下方开通会员。";
       }
       if (bannerEl) {
         if (isUpgrade && currentUsage?.isPro) {
@@ -868,7 +871,11 @@
           bannerEl.classList.add("hidden");
         }
       }
-      if (deviceHintEl) deviceHintEl.textContent = deviceId;
+      if (confirmBtn) confirmBtn.textContent = isUpgrade ? "输入邀请码并升级" : "输入邀请码并开通";
+      if (revealedTitle) revealedTitle.textContent = isUpgrade ? "您的升级邀请码" : "您的邀请码";
+      if (els.inviteCodeInput) {
+        els.inviteCodeInput.placeholder = isUpgrade ? "获取升级邀请码后，填入此处" : "付款获取邀请码后，填入此处";
+      }
     }
 
     function openPurchaseModal() {
@@ -916,12 +923,12 @@
       }
       const planInv = inv.plans?.[selectedPlanId];
       if (planInv && planInv.ready && planInv.available <= 0) {
-        warnEl.textContent = "该套餐激活码已发完，请换套餐或点击「联系客服」。";
+        warnEl.textContent = "该套餐邀请码已发完，请换套餐或稍后再试。";
         warnEl.classList.remove("hidden");
         return;
       }
       if (planInv && !planInv.ready) {
-        warnEl.textContent = "该套餐未配置激活码，请选择其他套餐或联系客服。";
+        warnEl.textContent = "该套餐未配置邀请码，请选择其他套餐。";
         warnEl.classList.remove("hidden");
         return;
       }
@@ -931,7 +938,7 @@
     function updateDevicePolicyNote() {
       const noteEl = document.getElementById("devicePolicyNote");
       if (!noteEl) return;
-      noteEl.textContent = "提示：每个激活码仅限一台电脑使用，不可共享";
+      noteEl.textContent = "提示：每个邀请码仅限一台电脑使用，不可共享";
     }
 
     function showRevealedCode(code, message) {
@@ -942,13 +949,12 @@
       codeEl.textContent = code || "";
       msgEl.textContent = message || "";
       box.classList.toggle("hidden", !code);
+      if (code && els.inviteCodeInput) els.inviteCodeInput.value = code;
     }
 
     function resetActivateModalView() {
       showRevealedCode("", "");
-      if (els.activationCodeInput) els.activationCodeInput.value = "";
-      const upgradeInput = document.getElementById("upgradeCodeInput");
-      if (upgradeInput) upgradeInput.value = "";
+      if (els.inviteCodeInput) els.inviteCodeInput.value = "";
     }
 
     function updatePaymentNote(plans = getModalPlans()) {
@@ -956,9 +962,9 @@
       const plan = (plans || []).find((p) => p.id === selectedPlanId);
       if (!paymentNoteEl) return;
       if (modalMode === "upgrade" && plan) {
-        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}）`;
+        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}），付款后点击「获取升级邀请码」`;
       } else if (plan) {
-        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款后点击下方按钮自动领取激活码`;
+        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款后点击「获取邀请码」`;
       } else if (purchaseInfo?.payment?.note) {
         paymentNoteEl.textContent = purchaseInfo.payment.note;
       }
@@ -1003,7 +1009,7 @@
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
       updatePaymentNote(plans);
       if (contactEl) {
-        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "请先选择套餐并扫码支付，再点击下方按钮自动领取激活码并开通"}</strong>`;
+        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "选择套餐 → 扫码付款 → 获取邀请码 → 填入并开通"}</strong>`;
       }
       updateInventoryWarn();
       updateDevicePolicyNote();
@@ -1073,14 +1079,14 @@
     els.activateBtn.onclick = openPurchaseModal;
     document.getElementById("upgradeBtn").onclick = openUpgradeModal;
     document.getElementById("activateCancelBtn").onclick = () => els.activateModal.classList.remove("show");
-    document.getElementById("claimActivateBtn").onclick = async () => {
-      const btn = document.getElementById("claimActivateBtn");
+    document.getElementById("claimInviteBtn").onclick = async () => {
+      const btn = document.getElementById("claimInviteBtn");
       if (!selectedPlanId) {
         alert("请选择套餐");
         return;
       }
       btn.disabled = true;
-      btn.textContent = "领取中...";
+      btn.textContent = "获取中...";
       try {
         const r = await fetch(`${API}/api/purchase`, {
           method: "POST",
@@ -1089,74 +1095,84 @@
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        showRevealedCode(d.code || "", d.message || "会员已开通");
-        await refreshUsage();
-        toast(d.message || "会员已开通");
-        renderPricingCards();
+        if (d.alreadyPro) {
+          alert(d.message || "您已是会员");
+          return;
+        }
+        showRevealedCode(d.code || "", d.message || "请填入下方邀请码并开通");
+        toast("邀请码已生成，请填入下方并确认开通");
       } catch (e) {
-        alert(e.message || "领取失败");
+        alert(e.message || "获取邀请码失败");
       } finally {
         btn.disabled = false;
-        btn.textContent = "我已完成付款，领取激活码并开通";
+        btn.textContent = "我已完成付款，获取邀请码";
       }
     };
-    document.getElementById("upgradeSubmitBtn").onclick = async () => {
-      const upgradeCode = document.getElementById("upgradeCodeInput")?.value.trim();
+    document.getElementById("claimUpgradeBtn").onclick = async () => {
+      const btn = document.getElementById("claimUpgradeBtn");
       if (!selectedPlanId) {
         alert("请选择升级套餐");
         return;
       }
-      if (!upgradeCode) {
-        alert("请输入升级码。付款补差价后请联系客服获取");
-        return;
-      }
-      const btn = document.getElementById("upgradeSubmitBtn");
       btn.disabled = true;
-      btn.textContent = "升级中...";
+      btn.textContent = "获取中...";
       try {
-        const r = await fetch(`${API}/api/upgrade`, {
+        const r = await fetch(`${API}/api/claim-upgrade`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, planId: selectedPlanId, upgradeCode }),
+          body: JSON.stringify({ deviceId, planId: selectedPlanId }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        els.activateModal.classList.remove("show");
-        modalMode = "purchase";
-        await refreshUsage();
-        toast(d.message || "套餐升级成功");
+        showRevealedCode(d.code || "", d.message || "请填入下方邀请码并升级");
+        toast("升级邀请码已生成，请填入下方并确认升级");
       } catch (e) {
-        alert(e.message || "升级失败");
+        alert(e.message || "获取升级邀请码失败");
       } finally {
         btn.disabled = false;
-        btn.textContent = "输入升级码并升级";
+        btn.textContent = "我已完成补差价，获取升级邀请码";
       }
     };
-    document.getElementById("activateSubmitBtn").onclick = async () => {
-      const code = els.activationCodeInput.value.trim();
+    document.getElementById("confirmInviteBtn").onclick = async () => {
+      const code = els.inviteCodeInput?.value.trim();
       if (!code) {
-        alert("请输入激活码");
+        alert("请输入邀请码");
         return;
       }
-      const btn = document.getElementById("activateSubmitBtn");
+      const btn = document.getElementById("confirmInviteBtn");
       btn.disabled = true;
-      btn.textContent = "开通中...";
+      btn.textContent = modalMode === "upgrade" ? "升级中..." : "开通中...";
       try {
-        const r = await fetch(`${API}/api/activate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, code }),
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error);
-        els.activateModal.classList.remove("show");
-        await refreshUsage();
-        toast(d.message || "会员开通成功");
+        if (modalMode === "upgrade") {
+          if (!selectedPlanId) throw new Error("请选择升级套餐");
+          const r = await fetch(`${API}/api/upgrade`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceId, planId: selectedPlanId, upgradeCode: code }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error);
+          els.activateModal.classList.remove("show");
+          modalMode = "purchase";
+          await refreshUsage();
+          toast(d.message || "套餐升级成功");
+        } else {
+          const r = await fetch(`${API}/api/activate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceId, code }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.error);
+          els.activateModal.classList.remove("show");
+          await refreshUsage();
+          toast(d.message || "会员开通成功");
+        }
       } catch (e) {
-        alert(e.message || "开通失败");
+        alert(e.message || (modalMode === "upgrade" ? "升级失败" : "开通失败"));
       } finally {
         btn.disabled = false;
-        btn.textContent = "手动激活";
+        btn.textContent = modalMode === "upgrade" ? "输入邀请码并升级" : "输入邀请码并开通";
       }
     };
     els.activateModal.onclick = (e) => {

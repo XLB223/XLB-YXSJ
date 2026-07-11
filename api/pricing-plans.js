@@ -88,7 +88,7 @@ export function getPurchaseInfo(env = process.env) {
   return {
     plans: PRICING_PLANS,
     siteUrl,
-    contact: contact || "请先选择套餐并扫码支付，再点击下方按钮自动领取激活码并开通",
+    contact: contact || "选择套餐 → 扫码付款 → 获取邀请码 → 填入并开通",
     contactService: {
       wechatQr: (env.CONTACT_WECHAT_QR || "/assets/payment/wechat-service.png").trim(),
       wechatId,
