@@ -68,6 +68,9 @@ async function handleRequest(req, res) {
     sendJson(res, 200, {
       ok: true,
       hasApiKey: Boolean(env.DEEPSEEK_API_KEY),
+      hasActivationCodes: Boolean(env.ACTIVATION_CODES_MONTH || env.ACTIVATION_CODES_HALF || env.ACTIVATION_CODES_YEAR || env.ACTIVATION_CODES),
+      hasUpgradeCodes: Boolean(env.UPGRADE_CODES_HALF || env.UPGRADE_CODES_YEAR),
+      cwd: process.cwd(),
       message: env.DEEPSEEK_API_KEY
         ? "服务器运行正常"
         : "服务器已启动，但未配置 DEEPSEEK_API_KEY",

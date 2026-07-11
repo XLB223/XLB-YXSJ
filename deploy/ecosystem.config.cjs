@@ -1,9 +1,11 @@
+const path = require("path");
+
 module.exports = {
   apps: [
     {
       name: "listing-ai",
       script: "server.mjs",
-      cwd: "/www/wwwroot/kjdsai.cn",
+      cwd: path.join(__dirname, ".."),
       instances: 1,
       autorestart: true,
       watch: false,
