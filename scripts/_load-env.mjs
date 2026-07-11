@@ -8,7 +8,9 @@ export function loadEnv() {
   const env = { ...process.env };
   const envPath = path.join(__dirname, "..", ".env");
   try {
-    const lines = fs.readFileSync(envPath, "utf8").split("\n");
+    let raw = fs.readFileSync(envPath, "utf8");
+    if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1);
+    const lines = raw.split(/\r?\n/);
     for (const line of lines) {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) continue;
