@@ -85,7 +85,7 @@ function assertCodeAvailableForDevice(deviceId, code, store) {
 
   if (owner) {
     if (owner !== deviceId) {
-      const error = new Error("该邀请码已在其他设备使用，一码仅限一台设备");
+      const error = new Error("该邀请码已绑定其他电脑，一码仅限一台设备。换电脑请联系客服解绑后再激活。");
       error.status = 403;
       throw error;
     }
@@ -95,7 +95,7 @@ function assertCodeAvailableForDevice(deviceId, code, store) {
   const pending = getPendingClaimByCode(store, normalized);
   if (pending) {
     if (pending.deviceId !== deviceId) {
-      const error = new Error("该邀请码已在其他设备领取");
+      const error = new Error("该邀请码已在其他电脑领取，一码仅限一台设备");
       error.status = 403;
       throw error;
     }
@@ -103,7 +103,7 @@ function assertCodeAvailableForDevice(deviceId, code, store) {
   }
 
   if (store.usedActivationCodes?.includes(normalized)) {
-    const error = new Error("该邀请码已被使用，一码仅限一台设备");
+    const error = new Error("该邀请码已被使用，一码仅限一台设备。换电脑请联系客服解绑。");
     error.status = 403;
     throw error;
   }
@@ -314,7 +314,7 @@ export function activateDevice(deviceId, code, env = process.env) {
   }
   return {
     ...result,
-    message: `${result.planName}已开通，邀请码已绑定本设备，有效期至 ${formatDate(result.expiresAt)}`,
+    message: `${result.planName}已开通，邀请码已绑定本电脑，其他电脑无法同时使用。换电脑请联系客服解绑。有效期至 ${formatDate(result.expiresAt)}`,
   };
 }
 
@@ -750,9 +750,12 @@ function applyPlanToDevice(deviceId, planId, meta = {}, env = process.env) {
   }
 
   const store = loadStore();
+  const code = meta.code ? String(meta.code).trim() : "";
+  if (code) {
+    assertCodeAvailableForDevice(deviceId, code, store);
+  }
   const existing = getActiveProRecord(deviceId, store);
   const expiresAt = computeExpiresAt(existing?.expiresAt, plan.days);
-  const code = meta.code;
 
   if (code && !store.usedActivationCodes.includes(code)) {
     store.usedActivationCodes.push(code);
@@ -772,7 +775,7 @@ function applyPlanToDevice(deviceId, planId, meta = {}, env = process.env) {
     plan: planId,
     planName: plan.name,
     expiresAt,
-    message: `${plan.name}已开通，有效期至 ${formatDate(expiresAt)}，已解锁无限次生成`,
+    message: `${plan.name}已开通，有效期至 ${formatDate(expiresAt)}，已解锁无限次生成（本邀请码已绑定此电脑）`,
   };
 }
 

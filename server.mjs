@@ -5,7 +5,7 @@ import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, getCurrentOrderForDevice, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { sendContactMessage } from "./api/mail.mjs";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
@@ -329,6 +329,17 @@ async function handleRequest(req, res) {
           message: error.message || "无法确认此订单",
         })
       );
+    }
+    return;
+  }
+
+  if (url.startsWith("/api/order/current")) {
+    try {
+      const query = new URL(req.url, "http://localhost").searchParams;
+      const order = getCurrentOrderForDevice(query.get("deviceId"));
+      sendJson(res, 200, { order });
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || "查询失败" });
     }
     return;
   }

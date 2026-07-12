@@ -795,7 +795,6 @@
   <div class="modal-overlay" id="contactModal">
     <div class="modal-box contact-modal-box">
       <h3>联系客服</h3>
-      <p class="modal-sub">咨询使用问题；换电脑请提供激活码，客服可远程解绑后在新电脑重新激活</p>
       <div class="contact-modal-body">
         <div class="contact-wechat-block">
           <img id="contactModalWechatQr" src="/assets/payment/wechat-service.png" alt="客服微信二维码" />
@@ -863,20 +862,17 @@
 
   <div class="modal-overlay" id="orderLookupModal">
     <div class="modal-box">
-      <h3>查询订单</h3>
-      <p class="modal-sub">输入订单号，确认收款后可查看邀请码</p>
-      <div class="invite-input-block">
-        <label class="activate-label" for="lookupOrderId">订单号</label>
-        <input type="text" id="lookupOrderId" placeholder="如 KJ-20260711-A3F9" autocomplete="off" />
-      </div>
+      <h3>我的订单</h3>
+      <p class="modal-sub" id="lookupHint">正在查询本机订单…</p>
       <div class="order-info-box hidden" id="lookupResultBox">
-        <strong>订单状态</strong>
+        <strong id="lookupResultTitle">订单号</strong>
+        <div>订单号：<span class="order-id" id="lookupOrderIdDisplay"></span></div>
         <p id="lookupResultMessage"></p>
         <div class="hidden" id="lookupCodeWrap">邀请码：<span class="order-id" id="lookupCodeText"></span></div>
       </div>
+      <p class="modal-sub hidden" id="lookupEmpty">本机暂无订单，请先在「开通会员」中付款并提交。</p>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="orderLookupCloseBtn">关闭</button>
-        <button type="button" class="btn-submit" id="orderLookupSubmitBtn">查询</button>
       </div>
     </div>
   </div>
@@ -1143,32 +1139,54 @@
     }
 
     function openOrderLookupModal() {
-      document.getElementById("lookupResultBox")?.classList.add("hidden");
       document.getElementById("orderLookupModal")?.classList.add("show");
+      void refreshCurrentOrderLookup();
     }
 
-    async function lookupOrderNow() {
-      const orderId = document.getElementById("lookupOrderId")?.value.trim();
-      if (!orderId) return alert("请输入订单号");
-      const btn = document.getElementById("orderLookupSubmitBtn");
-      btn.disabled = true;
+    function renderOrderLookupResult(order) {
+      const box = document.getElementById("lookupResultBox");
+      const empty = document.getElementById("lookupEmpty");
+      const hint = document.getElementById("lookupHint");
+      const idEl = document.getElementById("lookupOrderIdDisplay");
+      const msgEl = document.getElementById("lookupResultMessage");
+      const codeWrap = document.getElementById("lookupCodeWrap");
+      const codeEl = document.getElementById("lookupCodeText");
+      if (!order?.orderId) {
+        box?.classList.add("hidden");
+        empty?.classList.remove("hidden");
+        if (hint) hint.textContent = "";
+        return;
+      }
+      empty?.classList.add("hidden");
+      box?.classList.remove("hidden");
+      if (hint) hint.textContent = "";
+      if (idEl) idEl.textContent = order.orderId;
+      if (msgEl) msgEl.textContent = order.message || "";
+      if (order.status === "fulfilled" && order.code) {
+        codeWrap?.classList.remove("hidden");
+        if (codeEl) codeEl.textContent = order.code;
+      } else {
+        codeWrap?.classList.add("hidden");
+        if (codeEl) codeEl.textContent = "";
+      }
+    }
+
+    async function refreshCurrentOrderLookup() {
+      const hint = document.getElementById("lookupHint");
+      if (hint) hint.textContent = "正在查询本机订单…";
       try {
-        const r = await fetch(`${API}/api/order/status?orderId=${encodeURIComponent(orderId)}&deviceId=${encodeURIComponent(deviceId)}`);
+        const r = await fetch(`${API}/api/order/current?deviceId=${encodeURIComponent(deviceId)}`);
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        document.getElementById("lookupResultMessage").textContent = d.message || "";
-        const codeWrap = document.getElementById("lookupCodeWrap");
-        if (d.status === "fulfilled" && d.code) {
-          codeWrap?.classList.remove("hidden");
-          document.getElementById("lookupCodeText").textContent = d.code;
+        if (d.order) {
+          savePendingOrder(d.order, d.order.type);
+          renderOrderLookupResult(d.order);
         } else {
-          codeWrap?.classList.add("hidden");
+          renderOrderLookupResult(null);
         }
-        document.getElementById("lookupResultBox")?.classList.remove("hidden");
       } catch (e) {
-        alert(e.message || "查询失败");
-      } finally {
-        btn.disabled = false;
+        renderOrderLookupResult(null);
+        if (hint) hint.textContent = e.message || "查询失败";
       }
     }
 
@@ -1398,7 +1416,6 @@
     document.getElementById("paidUpgradeBtn").onclick = () => markAsPaid("upgrade");
     document.getElementById("notifyUpgradeBtn").onclick = () => sendNotify("upgrade");
     document.getElementById("orderQueryBtn").onclick = openOrderLookupModal;
-    document.getElementById("orderLookupSubmitBtn").onclick = lookupOrderNow;
     document.getElementById("orderLookupCloseBtn").onclick = () =>
       document.getElementById("orderLookupModal").classList.remove("show");
     document.getElementById("confirmInviteBtn").onclick = async () => {

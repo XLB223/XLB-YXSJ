@@ -271,6 +271,20 @@ export function getOrderStatus(orderId, deviceId) {
   return formatOrderResponse(order);
 }
 
+export function getCurrentOrderForDevice(deviceId) {
+  const normalizedDeviceId = String(deviceId || "").trim();
+  if (!normalizedDeviceId) {
+    const error = new Error("缺少设备标识");
+    error.status = 400;
+    throw error;
+  }
+  const store = loadOrdersStore();
+  const orders = Object.values(store.orders)
+    .filter((order) => order.deviceId === normalizedDeviceId)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  return orders[0] ? formatOrderResponse(orders[0]) : null;
+}
+
 export function lookupOrder(orderId, deviceId) {
   return getOrderStatus(orderId, deviceId);
 }

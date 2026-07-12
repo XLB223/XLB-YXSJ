@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, getCurrentOrderForDevice, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { sendContactMessage } from "./api/mail.mjs";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
@@ -361,6 +361,21 @@ export default defineConfig(({ mode }) => {
                 res.end(
                   `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>确认失败</title></head><body><h1>确认失败</h1><p>${error.message || "无法确认此订单"}</p></body></html>`
                 );
+              }
+              return;
+            }
+
+            if (url.startsWith("/api/order/current")) {
+              try {
+                const query = new URL(req.url, "http://localhost").searchParams;
+                const order = getCurrentOrderForDevice(query.get("deviceId"));
+                res.statusCode = 200;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ order }));
+              } catch (error) {
+                res.statusCode = error.status || 500;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: error.message || "查询失败" }));
               }
               return;
             }
