@@ -9,6 +9,7 @@ import {
   buildUpgradeOptions,
   calculateUpgradePrice,
   formatMoney,
+  getPlanTier,
 } from "./pricing-plans.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +22,30 @@ function getUsageFile() {
 }
 
 const USAGE_FILE = getUsageFile();
+const ORDERS_FILE = path.join(__dirname, "..", "data", "orders.json");
+
+function findFulfilledUpgradeOrder(deviceId, targetPlanId, code) {
+  try {
+    if (!fs.existsSync(ORDERS_FILE)) return null;
+    const raw = JSON.parse(fs.readFileSync(ORDERS_FILE, "utf8"));
+    const orders = raw.orders || {};
+    const normalizedDeviceId = String(deviceId || "").trim();
+    const normalizedTargetId = String(targetPlanId || "").trim();
+    const normalizedCode = String(code || "").trim();
+    return (
+      Object.values(orders).find(
+        (order) =>
+          order.deviceId === normalizedDeviceId &&
+          order.type === "upgrade" &&
+          order.planId === normalizedTargetId &&
+          order.status === "fulfilled" &&
+          order.code === normalizedCode
+      ) || null
+    );
+  } catch {
+    return null;
+  }
+}
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -370,7 +395,7 @@ function assertCanClaim(deviceId, store) {
   }
 }
 
-export function claimPurchaseCode(deviceId, planId, env = process.env) {
+export function claimPurchaseCode(deviceId, planId, env = process.env, options = {}) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");
     error.status = 400;
@@ -414,7 +439,9 @@ export function claimPurchaseCode(deviceId, planId, env = process.env) {
     throw error;
   }
 
-  assertCanClaim(deviceId, store);
+  if (!options.skipClaimLimit) {
+    assertCanClaim(deviceId, store);
+  }
 
   const used = getUsedCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
@@ -433,7 +460,9 @@ export function claimPurchaseCode(deviceId, planId, env = process.env) {
     planId: normalizedPlanId,
     claimedAt: new Date().toISOString(),
   };
-  recordClaimAttempt(deviceId, store);
+  if (!options.skipClaimLimit) {
+    recordClaimAttempt(deviceId, store);
+  }
   saveStore(store);
 
   return {
@@ -526,7 +555,7 @@ function applyUpgradeToDevice(deviceId, targetPlanId, store, meta = {}) {
   };
 }
 
-export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
+export function claimUpgradeCode(deviceId, targetPlanId, env = process.env, options = {}) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");
     error.status = 400;
@@ -570,19 +599,34 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
     };
   }
 
+  if (existingPending?.code && existingPending.targetPlanId !== normalizedTargetId) {
+    delete store.pendingUpgradeClaims[deviceId];
+    saveStore(store);
+  }
+
   const configuredCodes = getUpgradeCodeList(normalizedTargetId, env);
   if (!configuredCodes.length) {
-    const error = new Error("服务器未配置升级邀请码，请联系管理员");
+    const error = new Error(
+      normalizedTargetId === "year"
+        ? "服务器未配置年卡升级邀请码（UPGRADE_CODES_YEAR），请联系管理员"
+        : "服务器未配置升级邀请码，请联系管理员"
+    );
     error.status = 503;
     throw error;
   }
 
-  assertCanClaim(deviceId, store);
+  if (!options.skipClaimLimit) {
+    assertCanClaim(deviceId, store);
+  }
 
   const used = getUsedUpgradeCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
   if (!available.length) {
-    const error = new Error("该套餐升级邀请码已发完，请稍后再试");
+    const error = new Error(
+      normalizedTargetId === "year"
+        ? "年卡升级邀请码已发完，请联系管理员补充 UPGRADE_CODES_YEAR"
+        : "该套餐升级邀请码已发完，请稍后再试"
+    );
     error.status = 503;
     throw error;
   }
@@ -593,7 +637,9 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env) {
     targetPlanId: normalizedTargetId,
     claimedAt: new Date().toISOString(),
   };
-  recordClaimAttempt(deviceId, store);
+  if (!options.skipClaimLimit) {
+    recordClaimAttempt(deviceId, store);
+  }
   saveStore(store);
 
   return {
@@ -637,6 +683,13 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
   }
 
   const store = loadStore();
+  const proRecord = getActiveProRecord(deviceId, store);
+  if (!proRecord) {
+    const error = new Error("当前不是会员，请先开通会员");
+    error.status = 403;
+    throw error;
+  }
+
   const pending = store.pendingUpgradeClaims?.[deviceId];
   const pendingByCode = getPendingUpgradeClaimByCode(store, normalizedCode);
   if (pendingByCode && pendingByCode.deviceId !== deviceId) {
@@ -644,17 +697,25 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
     error.status = 403;
     throw error;
   }
-  if (
-    !pending ||
-    pending.code !== normalizedCode ||
-    pending.targetPlanId !== normalizedTargetId
-  ) {
-    const error = new Error("请先在上方点击「获取升级邀请码」，再将显示的邀请码填入下方并确认升级");
+
+  const pendingOk =
+    pending &&
+    pending.code === normalizedCode &&
+    pending.targetPlanId === normalizedTargetId;
+  const fulfilledOrder = findFulfilledUpgradeOrder(deviceId, normalizedTargetId, normalizedCode);
+  if (!pendingOk && !fulfilledOrder) {
+    const error = new Error("请等待管理员确认收款，邀请码将自动填入后再点击升级");
     error.status = 403;
     throw error;
   }
 
-  assertCanClaim(deviceId, store);
+  const currentTier = getPlanTier(proRecord.plan || "year");
+  const targetTier = getPlanTier(normalizedTargetId);
+  if (targetTier <= currentTier) {
+    const error = new Error("您已是该档位或更高档位会员，无需重复升级");
+    error.status = 400;
+    throw error;
+  }
 
   const result = applyUpgradeToDevice(deviceId, normalizedTargetId, store, {
     upgradeCode: normalizedCode,
@@ -665,7 +726,6 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
   if (store.pendingUpgradeClaims?.[deviceId]?.code === normalizedCode) {
     delete store.pendingUpgradeClaims[deviceId];
   }
-  recordClaimAttempt(deviceId, store);
   saveStore(store);
 
   return {

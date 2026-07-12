@@ -998,6 +998,18 @@
     let pendingRevealedCode = null;
     let orderPollTimer = null;
     let activePendingOrderId = null;
+    const PLAN_TIER_ORDER = { month: 1, half: 2, year: 3 };
+
+    function getPlanTier(planId) {
+      return PLAN_TIER_ORDER[planId] || 0;
+    }
+
+    function isStaleUpgradeOrder(order) {
+      if (!order || order.type !== "upgrade" || order.status !== "fulfilled") return false;
+      const currentTier = getPlanTier(currentUsage?.plan);
+      const orderTier = getPlanTier(order.planId);
+      return currentTier >= orderTier;
+    }
 
     function getModalPlans() {
       const fallback = [
@@ -1124,6 +1136,7 @@
           orderId: order.orderId,
           status: order.status,
           type: type || order.type || "purchase",
+          planId: order.planId || selectedPlanId || "",
           adminNotified: Boolean(order.adminNotified),
         })
       );
@@ -1171,7 +1184,7 @@
         applyOrderState(d);
         if (d.status === "fulfilled" && d.code) {
           stopOrderPolling();
-          toast("邀请码已填入，请点击开通");
+          toast(d.type === "upgrade" ? "升级邀请码已填入，请点击升级" : "邀请码已填入，请点击开通");
         } else if (d.status === "cancelled") {
           stopOrderPolling();
           clearPendingOrder();
@@ -1187,9 +1200,50 @@
       const pending = loadPendingOrder();
       if (!pending?.orderId) return;
       const expectedType = modalMode === "upgrade" ? "upgrade" : "purchase";
-      if (pending.type && pending.type !== expectedType) return;
+      if (pending.type && pending.type !== expectedType) {
+        clearPendingOrder();
+        return;
+      }
       const order = await refreshOrderStatus(pending.orderId);
-      if (order && order.status === "pending" && order.adminNotified) {
+      if (!order) {
+        clearPendingOrder();
+        updateOrderFlowUI(null, expectedType);
+        resetActivateModalView();
+        return;
+      }
+      if (order.status === "cancelled" || isStaleUpgradeOrder(order)) {
+        clearPendingOrder();
+        updateOrderFlowUI(null, expectedType);
+        resetActivateModalView();
+        return;
+      }
+      if (
+        modalMode === "upgrade" &&
+        order.planId &&
+        selectedPlanId &&
+        order.planId !== selectedPlanId &&
+        order.status !== "pending"
+      ) {
+        clearPendingOrder();
+        updateOrderFlowUI(null, expectedType);
+        resetActivateModalView();
+        return;
+      }
+      if (
+        modalMode === "upgrade" &&
+        pending.planId &&
+        selectedPlanId &&
+        pending.planId !== selectedPlanId &&
+        order.status === "pending"
+      ) {
+        clearPendingOrder();
+        updateOrderFlowUI(null, expectedType);
+        resetActivateModalView();
+        return;
+      }
+      applyOrderState(order);
+      updateOrderFlowUI(order, order.type);
+      if (order.status === "pending" && order.adminNotified) {
         startOrderPolling(pending.orderId);
       }
     }
@@ -1344,9 +1398,36 @@
     }
 
     function updateInventoryWarn() {
-      if (modalMode === "upgrade") return;
       const warnEl = document.getElementById("inventoryWarn");
       if (!warnEl) return;
+      if (modalMode === "upgrade") {
+        const inv = purchaseInfo?.upgradeInventory;
+        if (!inv?.configured) {
+          warnEl.textContent =
+            "服务器尚未配置升级邀请码（.env 中 UPGRADE_CODES_HALF / UPGRADE_CODES_YEAR），请联系管理员。";
+          warnEl.classList.remove("hidden");
+          return;
+        }
+        const planInv = inv.plans?.[selectedPlanId];
+        if (planInv && planInv.ready && planInv.available <= 0) {
+          warnEl.textContent =
+            selectedPlanId === "year"
+              ? "年卡升级邀请码已发完，请联系管理员补充 UPGRADE_CODES_YEAR。"
+              : "该升级套餐邀请码已发完，请稍后再试。";
+          warnEl.classList.remove("hidden");
+          return;
+        }
+        if (planInv && !planInv.ready) {
+          warnEl.textContent =
+            selectedPlanId === "year"
+              ? "未配置年卡升级邀请码（UPGRADE_CODES_YEAR），请联系管理员。"
+              : "该升级套餐未配置邀请码，请选择其他套餐。";
+          warnEl.classList.remove("hidden");
+          return;
+        }
+        warnEl.classList.add("hidden");
+        return;
+      }
       const inv = purchaseInfo?.activationInventory;
       if (!inv?.configured) {
         warnEl.textContent =

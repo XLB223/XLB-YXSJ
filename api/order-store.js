@@ -333,9 +333,9 @@ export async function fulfillOrder(orderId, env = process.env) {
 
   let claimResult;
   if (order.type === "upgrade") {
-    claimResult = claimUpgradeCode(order.deviceId, order.planId, env);
+    claimResult = claimUpgradeCode(order.deviceId, order.planId, env, { skipClaimLimit: true });
   } else {
-    claimResult = claimPurchaseCode(order.deviceId, order.planId, env);
+    claimResult = claimPurchaseCode(order.deviceId, order.planId, env, { skipClaimLimit: true });
   }
 
   const code = claimResult.code;
