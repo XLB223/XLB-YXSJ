@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -244,6 +244,38 @@ export default defineConfig(({ mode }) => {
                   res.statusCode = error.status || 500;
                   res.setHeader("Content-Type", "application/json; charset=utf-8");
                   res.end(JSON.stringify({ error: error.message || "创建订单失败" }));
+                }
+              });
+              return;
+            }
+
+            if (url === "/api/order/notify") {
+              if (req.method === "OPTIONS") {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
+              if (req.method !== "POST") {
+                res.statusCode = 405;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              let body = "";
+              req.on("data", (chunk) => {
+                body += chunk;
+              });
+              req.on("end", () => {
+                try {
+                  const payload = body ? JSON.parse(body) : {};
+                  const result = notifyOrderToAdmin(payload.orderId, payload.deviceId, env);
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify(result));
+                } catch (error) {
+                  res.statusCode = error.status || 500;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ error: error.message || "发送通知失败" }));
                 }
               });
               return;

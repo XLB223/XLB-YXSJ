@@ -427,6 +427,8 @@
     }
     .order-polling-hint.hidden { display: none; }
     .order-submit-actions { margin-top: 4px; margin-bottom: 4px; }
+    .order-flow-actions { margin: 12px 0 8px; }
+    .order-flow-actions .hidden { display: none; }
     .payment-section.hidden { display: none; }
     .modal-section-gap {
       margin-top: 20px;
@@ -838,10 +840,10 @@
   <div class="modal-overlay" id="activateModal">
     <div class="modal-box">
       <h3 id="activateModalTitle">开通会员</h3>
-      <p class="modal-sub" id="pricingTrialNote">免费试用每天 3 次，试用结束后可开通会员。</p>
+      <p class="modal-sub" id="pricingTrialNote">选套餐 → 扫码付款 → 我已付款 → 发送通知 → 等待邀请码 → 开通</p>
       <div class="current-plan-banner hidden" id="currentPlanBanner"></div>
       <div class="pricing-grid" id="pricingGrid"></div>
-      <p class="payment-note" id="paymentNote">请先选择套餐并提交订单，付款时在备注填写订单号</p>
+      <p class="payment-note" id="paymentNote">请先选套餐，扫码支付对应金额</p>
       <div class="payment-section" id="paymentSection">
         <div class="payment-qr-row">
           <div class="payment-qr-item">
@@ -855,31 +857,30 @@
         </div>
         <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
       </div>
-      <div class="modal-actions order-submit-actions purchase-only">
-        <button type="button" class="btn-submit" id="submitOrderBtn" style="flex:1">① 提交订单</button>
+      <div class="modal-actions order-flow-actions purchase-only">
+        <button type="button" class="btn-submit" id="paidBtn" style="flex:1">① 我已付款</button>
+        <button type="button" class="btn-submit hidden" id="notifyBtn" style="flex:1">② 发送通知</button>
       </div>
-      <div class="modal-actions order-submit-actions upgrade-only hidden">
-        <button type="button" class="btn-submit" id="submitUpgradeOrderBtn" style="flex:1">① 提交升级订单</button>
+      <div class="modal-actions order-flow-actions upgrade-only hidden">
+        <button type="button" class="btn-submit" id="paidUpgradeBtn" style="flex:1">① 我已付款</button>
+        <button type="button" class="btn-submit hidden" id="notifyUpgradeBtn" style="flex:1">② 发送通知</button>
       </div>
       <div class="order-info-box hidden" id="orderInfoBox">
         <strong id="orderInfoTitle">您的订单号</strong>
         <div>订单号：<span class="order-id" id="orderIdText"></span></div>
         <p id="orderInfoMessage"></p>
-        <div class="order-code-line hidden" id="orderCodeWrap">邀请码：<span class="order-id" id="orderCodeText"></span></div>
-        <p class="order-polling-hint hidden" id="orderPollingHint">等待确认收款，邀请码将自动显示在上方…</p>
+        <p class="order-polling-hint hidden" id="orderPollingHint">等待管理员确认，邀请码将自动填入下方…</p>
       </div>
       <div class="inventory-warn hidden purchase-only" id="inventoryWarn"></div>
-      <p class="device-policy-note purchase-only" id="devicePolicyNote"></p>
       <div class="modal-section-gap activate-code-section">
         <div class="invite-input-block">
-          <label class="activate-label" for="inviteCodeInput">③ 邀请码（确认收款后自动填入）</label>
-          <input type="text" id="inviteCodeInput" placeholder="确认收款后邀请码会自动出现" autocomplete="off" />
+          <label class="activate-label" for="inviteCodeInput">邀请码</label>
+          <input type="text" id="inviteCodeInput" placeholder="确认收款后自动填入" autocomplete="off" />
         </div>
-        <p class="pricing-contact purchase-only" id="pricingContact">流程：选套餐 → 提交订单 → 扫码付款（备注订单号）→ 等待邀请码出现 → 点击开通</p>
       </div>
       <div class="modal-actions activate-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
-        <button type="button" class="btn-submit" id="confirmInviteBtn">输入邀请码并开通</button>
+        <button type="button" class="btn-submit" id="confirmInviteBtn">开通</button>
       </div>
     </div>
   </div>
@@ -995,8 +996,8 @@
       if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
       if (noteEl) {
         noteEl.textContent = isUpgrade
-          ? "选择升级套餐 → 提交订单 → 扫码付补差价（备注订单号）→ 等待邀请码出现"
-          : purchaseInfo?.trialNote || "免费试用每天 3 次。开通会员：选套餐 → 提交订单 → 付款备注订单号。";
+          ? "选升级套餐 → 扫码付补差价 → 我已付款 → 发送通知 → 等待邀请码 → 升级"
+          : purchaseInfo?.trialNote || "选套餐 → 扫码付款 → 我已付款 → 发送通知 → 等待邀请码 → 开通";
       }
       if (bannerEl) {
         if (isUpgrade && currentUsage?.isPro) {
@@ -1006,11 +1007,56 @@
           bannerEl.classList.add("hidden");
         }
       }
-      if (confirmBtn) confirmBtn.textContent = isUpgrade ? "输入邀请码并升级" : "输入邀请码并开通";
+      if (confirmBtn) confirmBtn.textContent = isUpgrade ? "升级" : "开通";
       if (els.inviteCodeInput) {
-        els.inviteCodeInput.placeholder = isUpgrade
-          ? "获取升级邀请码后，填入此处"
-          : "付款获取邀请码后，填入此处";
+        els.inviteCodeInput.placeholder = "确认收款后自动填入";
+      }
+    }
+
+    function getFlowButtons(type) {
+      const isUpgrade = type === "upgrade";
+      return {
+        paid: document.getElementById(isUpgrade ? "paidUpgradeBtn" : "paidBtn"),
+        notify: document.getElementById(isUpgrade ? "notifyUpgradeBtn" : "notifyBtn"),
+      };
+    }
+
+    function updateOrderFlowUI(order, type) {
+      const flowType = type || (modalMode === "upgrade" ? "upgrade" : "purchase");
+      const { paid, notify } = getFlowButtons(flowType);
+      const pollHint = document.getElementById("orderPollingHint");
+      if (!order?.orderId) {
+        if (paid) {
+          paid.disabled = false;
+          paid.textContent = "① 我已付款";
+        }
+        if (notify) {
+          notify.classList.add("hidden");
+          notify.disabled = false;
+          notify.textContent = "② 发送通知";
+        }
+        if (pollHint) pollHint.classList.add("hidden");
+        return;
+      }
+      if (paid) {
+        paid.disabled = true;
+        paid.textContent = "已记录付款";
+      }
+      if (notify) {
+        notify.classList.remove("hidden");
+        if (order.status === "fulfilled") {
+          notify.disabled = true;
+          notify.textContent = "已确认";
+          if (pollHint) pollHint.classList.add("hidden");
+        } else if (order.adminNotified) {
+          notify.disabled = true;
+          notify.textContent = "通知已发送";
+          if (pollHint) pollHint.classList.remove("hidden");
+        } else {
+          notify.disabled = false;
+          notify.textContent = "② 发送通知";
+          if (pollHint) pollHint.classList.add("hidden");
+        }
       }
     }
 
@@ -1027,64 +1073,33 @@
         `请付款时在备注填写 ${order.orderId}，确认后邀请码将自动显示。`;
       box.classList.remove("hidden");
       showOrderCodeInBox(order.code, order.status === "fulfilled");
+      updateOrderFlowUI(order, order.type);
       if (pollHint) {
         pollHint.classList.toggle(
           "hidden",
-          order.status === "fulfilled" || order.status === "cancelled"
+          order.status === "fulfilled" || order.status === "cancelled" || !order.adminNotified
         );
       }
     }
 
     function showOrderCodeInBox(code, show) {
-      const wrap = document.getElementById("orderCodeWrap");
-      const codeEl = document.getElementById("orderCodeText");
-      if (!wrap || !codeEl) return;
       const visible = Boolean(show && code);
-      wrap.classList.toggle("hidden", !visible);
-      codeEl.textContent = visible ? code : "";
       if (visible) {
         pendingRevealedCode = code;
         if (els.inviteCodeInput) els.inviteCodeInput.value = code;
         updateConfirmInviteState();
+      } else if (!code) {
+        pendingRevealedCode = null;
       }
     }
 
     function resetOrderInfo() {
       document.getElementById("orderInfoBox")?.classList.add("hidden");
-      document.getElementById("orderCodeWrap")?.classList.add("hidden");
       document.getElementById("orderPollingHint")?.classList.add("hidden");
       const idEl = document.getElementById("orderIdText");
       const msgEl = document.getElementById("orderInfoMessage");
-      const codeEl = document.getElementById("orderCodeText");
       if (idEl) idEl.textContent = "";
       if (msgEl) msgEl.textContent = "";
-      if (codeEl) codeEl.textContent = "";
-    }
-
-    function setSubmitOrderDoneState() {
-      const submitBtn = document.getElementById("submitOrderBtn");
-      const upgradeSubmitBtn = document.getElementById("submitUpgradeOrderBtn");
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "订单已提交";
-      }
-      if (upgradeSubmitBtn) {
-        upgradeSubmitBtn.disabled = true;
-        upgradeSubmitBtn.textContent = "升级订单已提交";
-      }
-    }
-
-    function resetSubmitOrderState() {
-      const submitBtn = document.getElementById("submitOrderBtn");
-      const upgradeSubmitBtn = document.getElementById("submitUpgradeOrderBtn");
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "① 提交订单";
-      }
-      if (upgradeSubmitBtn) {
-        upgradeSubmitBtn.disabled = false;
-        upgradeSubmitBtn.textContent = "① 提交升级订单";
-      }
     }
 
     function savePendingOrder(order, type) {
@@ -1095,6 +1110,7 @@
           orderId: order.orderId,
           status: order.status,
           type: type || order.type || "purchase",
+          adminNotified: Boolean(order.adminNotified),
         })
       );
     }
@@ -1139,14 +1155,13 @@
         if (!r.ok) return null;
         savePendingOrder(d, d.type);
         showOrderInfo(d);
-        setSubmitOrderDoneState();
         if (d.status === "fulfilled" && d.code) {
           stopOrderPolling();
-          toast("邀请码已生成，可直接点击开通");
+          toast("邀请码已填入，请点击开通");
         } else if (d.status === "cancelled") {
           stopOrderPolling();
           clearPendingOrder();
-          resetSubmitOrderState();
+          updateOrderFlowUI(null, d.type);
         }
         return d;
       } catch {
@@ -1160,23 +1175,20 @@
       const expectedType = modalMode === "upgrade" ? "upgrade" : "purchase";
       if (pending.type && pending.type !== expectedType) return;
       const order = await refreshOrderStatus(pending.orderId);
-      if (order && order.status === "pending") {
+      if (order && order.status === "pending" && order.adminNotified) {
         startOrderPolling(pending.orderId);
       }
     }
 
-    async function submitOrder(type) {
+    async function markAsPaid(type) {
       if (!selectedPlanId) {
         alert(type === "upgrade" ? "请选择升级套餐" : "请选择套餐");
         return;
       }
-      const btn =
-        type === "upgrade"
-          ? document.getElementById("submitUpgradeOrderBtn")
-          : document.getElementById("submitOrderBtn");
-      btn.disabled = true;
-      const oldText = btn.textContent;
-      btn.textContent = "提交中...";
+      const { paid } = getFlowButtons(type);
+      if (!paid) return;
+      paid.disabled = true;
+      paid.textContent = "处理中...";
       try {
         const r = await fetch(`${API}/api/order/create`, {
           method: "POST",
@@ -1187,20 +1199,41 @@
         if (!r.ok) throw new Error(d.error);
         savePendingOrder(d, type);
         showOrderInfo(d);
-        setSubmitOrderDoneState();
-        if (d.status === "fulfilled" && d.code) {
-          toast("邀请码已生成，可直接点击开通");
-        } else {
-          startOrderPolling(d.orderId);
-          toast("订单已创建，请扫码付款并在备注填写订单号");
-        }
+        updateOrderFlowUI(d, type);
+        toast("请点「发送通知」");
       } catch (e) {
-        alert(e.message || "提交订单失败");
-      } finally {
-        if (!loadPendingOrder()?.orderId) {
-          btn.disabled = false;
-          btn.textContent = oldText;
-        }
+        alert(e.message || "操作失败");
+        updateOrderFlowUI(null, type);
+      }
+    }
+
+    async function sendNotify(type) {
+      const pending = loadPendingOrder();
+      if (!pending?.orderId) {
+        alert("请先点「我已付款」");
+        return;
+      }
+      const { notify } = getFlowButtons(type);
+      if (!notify) return;
+      notify.disabled = true;
+      notify.textContent = "发送中...";
+      try {
+        const r = await fetch(`${API}/api/order/notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, orderId: pending.orderId }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        savePendingOrder(d, type);
+        showOrderInfo(d);
+        updateOrderFlowUI(d, type);
+        startOrderPolling(pending.orderId);
+        toast("通知已发送，请等待确认");
+      } catch (e) {
+        alert(e.message || "发送失败");
+        const order = await refreshOrderStatus(pending.orderId);
+        updateOrderFlowUI(order, type);
       }
     }
 
@@ -1253,8 +1286,8 @@
       modalMode = "purchase";
       resetActivateModalView();
       stopOrderPolling();
-      resetSubmitOrderState();
       resetOrderInfo();
+      updateOrderFlowUI(null, "purchase");
       updateModalModeUI();
       renderPricingCards();
       els.activateModal.classList.add("show");
@@ -1270,8 +1303,8 @@
       selectedPlanId = currentUsage.upgradeOptions[0].id;
       resetActivateModalView();
       stopOrderPolling();
-      resetSubmitOrderState();
       resetOrderInfo();
+      updateOrderFlowUI(null, "upgrade");
       updateModalModeUI();
       renderPricingCards();
       els.activateModal.classList.add("show");
@@ -1314,17 +1347,23 @@
       warnEl.classList.add("hidden");
     }
 
-    function updateDevicePolicyNote() {
-      const noteEl = document.getElementById("devicePolicyNote");
-      if (!noteEl) return;
-      noteEl.textContent = "提示：每个邀请码仅限一台电脑使用，不可共享";
+    function updatePaymentNote(plans = getModalPlans()) {
+      const paymentNoteEl = document.getElementById("paymentNote");
+      const plan = (plans || []).find((p) => p.id === selectedPlanId);
+      if (!paymentNoteEl) return;
+      if (modalMode === "upgrade" && plan) {
+        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}）`;
+      } else if (plan) {
+        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}）`;
+      } else if (purchaseInfo?.payment?.note) {
+        paymentNoteEl.textContent = purchaseInfo.payment.note;
+      }
     }
 
     function updateConfirmInviteState() {
       const btn = document.getElementById("confirmInviteBtn");
-      if (!btn || !els.inviteCodeInput) return;
-      const val = els.inviteCodeInput.value.trim();
-      btn.disabled = pendingRevealedCode ? val !== pendingRevealedCode : false;
+      if (!btn) return;
+      btn.disabled = false;
     }
 
     function resetActivateModalView() {
@@ -1334,22 +1373,8 @@
       updateConfirmInviteState();
     }
 
-    function updatePaymentNote(plans = getModalPlans()) {
-      const paymentNoteEl = document.getElementById("paymentNote");
-      const plan = (plans || []).find((p) => p.id === selectedPlanId);
-      if (!paymentNoteEl) return;
-      if (modalMode === "upgrade" && plan) {
-        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}）。先提交订单，付款备注请填订单号。`;
-      } else if (plan) {
-        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}）。先提交订单获取订单号，付款备注请填订单号。`;
-      } else if (purchaseInfo?.payment?.note) {
-        paymentNoteEl.textContent = purchaseInfo.payment.note;
-      }
-    }
-
     function renderPricingCards() {
       const grid = document.getElementById("pricingGrid");
-      const contactEl = document.getElementById("pricingContact");
       const noteEl = document.getElementById("pricingTrialNote");
       const paymentSiteEl = document.getElementById("paymentSite");
       const wechatQrEl = document.getElementById("wechatPayQr");
@@ -1385,11 +1410,7 @@
       wechatQrEl.src = purchaseInfo?.payment?.wechatQr || "/assets/payment/wechat-pay.png";
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
       updatePaymentNote(plans);
-      if (contactEl) {
-        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "选套餐 → 提交订单 → 付款备注订单号 → 等待邀请码出现"}</strong>`;
-      }
       updateInventoryWarn();
-      updateDevicePolicyNote();
       updateModalModeUI();
       renderContactModal();
     }
@@ -1452,8 +1473,10 @@
     els.activateBtn.onclick = openPurchaseModal;
     document.getElementById("upgradeBtn").onclick = openUpgradeModal;
     document.getElementById("activateCancelBtn").onclick = () => els.activateModal.classList.remove("show");
-    document.getElementById("submitOrderBtn").onclick = () => submitOrder("purchase");
-    document.getElementById("submitUpgradeOrderBtn").onclick = () => submitOrder("upgrade");
+    document.getElementById("paidBtn").onclick = () => markAsPaid("purchase");
+    document.getElementById("notifyBtn").onclick = () => sendNotify("purchase");
+    document.getElementById("paidUpgradeBtn").onclick = () => markAsPaid("upgrade");
+    document.getElementById("notifyUpgradeBtn").onclick = () => sendNotify("upgrade");
     document.getElementById("orderQueryBtn").onclick = () => openOrderLookupModal();
     document.getElementById("orderLookupSubmitBtn").onclick = lookupOrderNow;
     document.getElementById("orderLookupCloseBtn").onclick = () =>
@@ -1464,11 +1487,7 @@
     document.getElementById("confirmInviteBtn").onclick = async () => {
       const code = els.inviteCodeInput?.value.trim();
       if (!code) {
-        alert("请输入邀请码");
-        return;
-      }
-      if (pendingRevealedCode && code !== pendingRevealedCode) {
-        alert("请输入上方显示的邀请码");
+        alert("请等待邀请码自动填入");
         return;
       }
       const btn = document.getElementById("confirmInviteBtn");
@@ -1508,7 +1527,7 @@
         alert(e.message || (modalMode === "upgrade" ? "升级失败" : "开通失败"));
       } finally {
         btn.disabled = false;
-        btn.textContent = modalMode === "upgrade" ? "输入邀请码并升级" : "输入邀请码并开通";
+        btn.textContent = modalMode === "upgrade" ? "升级" : "开通";
       }
     };
     els.activateModal.onclick = (e) => {

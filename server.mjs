@@ -5,7 +5,7 @@ import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -239,6 +239,23 @@ async function handleRequest(req, res) {
   }
 
   if (url === "/api/order/create") {
+    sendJson(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  if (url === "/api/order/notify" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      const result = notifyOrderToAdmin(payload.orderId, payload.deviceId, env);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || "发送通知失败" });
+    }
+    return;
+  }
+
+  if (url === "/api/order/notify") {
     sendJson(res, 405, { error: "Method not allowed" });
     return;
   }

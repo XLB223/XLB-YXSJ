@@ -61,13 +61,13 @@ function formatOrderResponse(order) {
     orderId: order.orderId,
     type: order.type,
     status: order.status,
-    email: order.email,
     planId: order.planId,
     planName: plan?.name || order.planId,
     amountLabel: order.amountLabel,
     paymentNote: order.orderId,
     createdAt: order.createdAt,
     fulfilledAt: order.fulfilledAt || null,
+    adminNotified: Boolean(order.adminNotified),
     code: order.status === "fulfilled" ? order.code : null,
     message: orderStatusMessage(order),
   };
@@ -76,13 +76,16 @@ function formatOrderResponse(order) {
 function orderStatusMessage(order) {
   if (order.status === "fulfilled") {
     return order.type === "upgrade"
-      ? `订单已确认收款，升级邀请码：${order.code}。请在本页下方输入邀请码并升级。`
-      : `订单已确认收款，邀请码：${order.code}。请在本页下方输入邀请码并开通。`;
+      ? "已确认收款，升级邀请码已填入下方，请点击开通。"
+      : "已确认收款，邀请码已填入下方，请点击开通。";
   }
   if (order.status === "cancelled") {
     return "订单已取消，如有疑问请联系客服。";
   }
-  return `订单待确认收款。请付款时在备注填写订单号 ${order.orderId}。确认后邀请码将自动显示在下方。`;
+  if (!order.adminNotified) {
+    return `订单号 ${order.orderId}。请点击「发送通知」，等待管理员确认收款。`;
+  }
+  return `订单号 ${order.orderId}。通知已发送，请等待管理员确认，邀请码将自动填入下方。`;
 }
 
 export function verifyAdminFulfillToken(token, env = process.env) {
@@ -152,7 +155,7 @@ export function createOrder({ deviceId, planId, type }, env = process.env) {
   if (pendingSame) {
     return {
       ...formatOrderResponse(pendingSame),
-      paymentInstructions: `请扫码支付 ${pendingSame.amountLabel}，并在付款备注中填写：${pendingSame.orderId}`,
+      paymentInstructions: `您的订单号：${pendingSame.orderId}`,
     };
   }
 
@@ -171,6 +174,7 @@ export function createOrder({ deviceId, planId, type }, env = process.env) {
     amountLabel,
     status: "pending",
     code: null,
+    adminNotified: false,
     createdAt: new Date().toISOString(),
     fulfilledAt: null,
   };
@@ -178,15 +182,62 @@ export function createOrder({ deviceId, planId, type }, env = process.env) {
   store.orders[orderId] = order;
   saveOrdersStore(store);
 
-  const formatted = {
+  return {
     ...formatOrderResponse(order),
-    paymentInstructions: `请扫码支付 ${amountLabel}，并在付款备注中填写：${orderId}`,
+    paymentInstructions: `您的订单号：${orderId}`,
   };
+}
 
-  const fulfillUrl = buildAdminFulfillUrl(orderId, env);
-  void notifyAdminNewOrder(formatted, env, fulfillUrl).catch(() => {});
+export function notifyOrderToAdmin(orderId, deviceId, env = process.env) {
+  const normalizedId = String(orderId || "").trim().toUpperCase();
+  const normalizedDeviceId = String(deviceId || "").trim();
 
-  return formatted;
+  if (!normalizedId) {
+    const error = new Error("缺少订单号");
+    error.status = 400;
+    throw error;
+  }
+  if (!normalizedDeviceId) {
+    const error = new Error("缺少设备标识");
+    error.status = 400;
+    throw error;
+  }
+
+  const store = loadOrdersStore();
+  const order = store.orders[normalizedId];
+  if (!order) {
+    const error = new Error("未找到订单");
+    error.status = 404;
+    throw error;
+  }
+  if (order.deviceId !== normalizedDeviceId) {
+    const error = new Error("无权操作此订单");
+    error.status = 403;
+    throw error;
+  }
+  if (order.status === "fulfilled") {
+    return formatOrderResponse(order);
+  }
+  if (order.status === "cancelled") {
+    const error = new Error("订单已取消");
+    error.status = 400;
+    throw error;
+  }
+
+  const formatted = formatOrderResponse(order);
+  if (!order.adminNotified) {
+    const fulfillUrl = buildAdminFulfillUrl(order.orderId, env);
+    void notifyAdminNewOrder(formatted, env, fulfillUrl).catch(() => {});
+    order.adminNotified = true;
+    order.notifiedAt = new Date().toISOString();
+    store.orders[normalizedId] = order;
+    saveOrdersStore(store);
+  }
+
+  return {
+    ...formatOrderResponse(order),
+    message: `通知已发送到管理员邮箱，请等待确认。订单号：${order.orderId}`,
+  };
 }
 
 export function getOrderStatus(orderId, deviceId) {
