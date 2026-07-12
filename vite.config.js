@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -254,6 +254,21 @@ export default defineConfig(({ mode }) => {
               try {
                 const query = new URL(req.url, "http://localhost").searchParams;
                 const result = lookupOrder(query.get("orderId"), query.get("email"), env);
+                res.statusCode = 200;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify(result));
+              } catch (error) {
+                res.statusCode = error.status || 500;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: error.message || "查询失败" }));
+              }
+              return;
+            }
+
+            if (url.startsWith("/api/order/status")) {
+              try {
+                const query = new URL(req.url, "http://localhost").searchParams;
+                const result = getOrderStatus(query.get("orderId"), query.get("deviceId"));
                 res.statusCode = 200;
                 res.setHeader("Content-Type", "application/json; charset=utf-8");
                 res.end(JSON.stringify(result));

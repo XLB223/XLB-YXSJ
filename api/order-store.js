@@ -142,7 +142,10 @@ export function createOrder({ deviceId, email, planId, type }, env = process.env
       order.planId === normalizedPlanId
   );
   if (pendingSame) {
-    return formatOrderResponse(pendingSame);
+    return {
+      ...formatOrderResponse(pendingSame),
+      paymentInstructions: `请扫码支付 ${pendingSame.amountLabel}，并在付款备注中填写：${pendingSame.orderId}`,
+    };
   }
 
   let amountLabel = plan.priceLabel;
@@ -175,6 +178,37 @@ export function createOrder({ deviceId, email, planId, type }, env = process.env
   void notifyAdminNewOrder(formatted, env).catch(() => {});
 
   return formatted;
+}
+
+export function getOrderStatus(orderId, deviceId) {
+  const normalizedId = String(orderId || "").trim().toUpperCase();
+  const normalizedDeviceId = String(deviceId || "").trim();
+
+  if (!normalizedId) {
+    const error = new Error("请输入订单号");
+    error.status = 400;
+    throw error;
+  }
+  if (!normalizedDeviceId) {
+    const error = new Error("缺少设备标识");
+    error.status = 400;
+    throw error;
+  }
+
+  const store = loadOrdersStore();
+  const order = store.orders[normalizedId];
+  if (!order) {
+    const error = new Error("未找到订单，请检查订单号");
+    error.status = 404;
+    throw error;
+  }
+  if (order.deviceId !== normalizedDeviceId) {
+    const error = new Error("无权查看此订单");
+    error.status = 403;
+    throw error;
+  }
+
+  return formatOrderResponse(order);
 }
 
 export function lookupOrder(orderId, email, env = process.env) {
