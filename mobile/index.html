@@ -788,7 +788,7 @@
       <p class="modal-sub" id="pricingTrialNote">免费试用每天 3 次，试用结束后可开通会员。</p>
       <div class="current-plan-banner hidden" id="currentPlanBanner"></div>
       <div class="pricing-grid" id="pricingGrid"></div>
-      <p class="payment-note" id="paymentNote">请先选择套餐，填写邮箱并提交订单，付款时在备注填写订单号</p>
+      <p class="payment-note" id="paymentNote">请先选择套餐并提交订单，付款时在备注填写订单号</p>
       <div class="payment-section" id="paymentSection">
         <div class="payment-qr-row">
           <div class="payment-qr-item">
@@ -801,10 +801,6 @@
           </div>
         </div>
         <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
-      </div>
-      <div class="invite-input-block">
-        <label class="activate-label" for="orderEmailInput">接收邀请码的邮箱</label>
-        <input type="email" id="orderEmailInput" placeholder="请先填写邮箱，再提交订单" autocomplete="email" />
       </div>
       <div class="modal-actions order-submit-actions purchase-only">
         <button type="button" class="btn-submit" id="submitOrderBtn" style="flex:1">① 提交订单</button>
@@ -826,7 +822,7 @@
           <label class="activate-label" for="inviteCodeInput">③ 邀请码</label>
           <input type="text" id="inviteCodeInput" placeholder="确认收款后自动填入" autocomplete="off" />
         </div>
-        <p class="pricing-contact purchase-only" id="pricingContact">选套餐 → 填邮箱 → 提交订单 → 付款备注订单号 → 等待邀请码 → 开通</p>
+        <p class="pricing-contact purchase-only" id="pricingContact">选套餐 → 提交订单 → 付款备注订单号 → 等待邀请码 → 开通</p>
       </div>
       <div class="modal-actions activate-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
@@ -838,13 +834,10 @@
   <div class="modal-overlay" id="orderLookupModal">
     <div class="modal-box">
       <h3>查询订单</h3>
+      <p class="modal-sub">输入订单号，确认收款后可查看邀请码</p>
       <div class="invite-input-block">
         <label class="activate-label" for="lookupOrderId">订单号</label>
         <input type="text" id="lookupOrderId" placeholder="如 KJ-20260711-A3F9" autocomplete="off" />
-      </div>
-      <div class="invite-input-block">
-        <label class="activate-label" for="lookupOrderEmail">邮箱</label>
-        <input type="email" id="lookupOrderEmail" placeholder="下单时填写的邮箱" autocomplete="email" />
       </div>
       <div class="order-info-box hidden" id="lookupResultBox">
         <strong>订单状态</strong>
@@ -862,7 +855,6 @@
     const API = "";
     const HISTORY_KEY = "listingProductHistory";
     const DEVICE_KEY = "listingDeviceId";
-    const ORDER_EMAIL_KEY = "listingOrderEmail";
     const ORDER_PENDING_KEY = "listingPendingOrder";
     const MAX_HISTORY = 30;
 
@@ -1013,7 +1005,7 @@
     function savePendingOrder(order, type) {
       if (!order?.orderId) return;
       localStorage.setItem(ORDER_PENDING_KEY, JSON.stringify({
-        orderId: order.orderId, email: order.email, status: order.status, type: type || order.type || "purchase",
+        orderId: order.orderId, status: order.status, type: type || order.type || "purchase",
       }));
     }
 
@@ -1060,26 +1052,11 @@
       if (!pending?.orderId) return;
       const expectedType = modalMode === "upgrade" ? "upgrade" : "purchase";
       if (pending.type && pending.type !== expectedType) return;
-      const emailInput = document.getElementById("orderEmailInput");
-      if (emailInput && pending.email) emailInput.value = pending.email;
       const order = await refreshOrderStatus(pending.orderId);
       if (order && order.status === "pending") startOrderPolling(pending.orderId);
     }
 
-    function getOrderEmail() {
-      const input = document.getElementById("orderEmailInput");
-      const saved = localStorage.getItem(ORDER_EMAIL_KEY) || "";
-      if (input && !input.value && saved) input.value = saved;
-      return input?.value.trim() || "";
-    }
-
-    function saveOrderEmail(email) {
-      if (email) localStorage.setItem(ORDER_EMAIL_KEY, email);
-    }
-
     async function submitOrder(type) {
-      const email = getOrderEmail();
-      if (!email) return alert("请填写邮箱");
       if (!selectedPlanId) return alert(type === "upgrade" ? "请选择升级套餐" : "请选择套餐");
       const btn = type === "upgrade" ? document.getElementById("submitUpgradeOrderBtn") : document.getElementById("submitOrderBtn");
       btn.disabled = true;
@@ -1089,11 +1066,10 @@
         const r = await fetch(`${API}/api/order/create`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, email, planId: selectedPlanId, type }),
+          body: JSON.stringify({ deviceId, planId: selectedPlanId, type }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        saveOrderEmail(email);
         savePendingOrder(d, type);
         showOrderInfo(d);
         setSubmitOrderDoneState();
@@ -1114,22 +1090,19 @@
     }
 
     function openOrderLookupModal() {
-      document.getElementById("lookupOrderEmail").value = localStorage.getItem(ORDER_EMAIL_KEY) || getOrderEmail();
       document.getElementById("lookupResultBox")?.classList.add("hidden");
       document.getElementById("orderLookupModal")?.classList.add("show");
     }
 
     async function lookupOrderNow() {
       const orderId = document.getElementById("lookupOrderId")?.value.trim();
-      const email = document.getElementById("lookupOrderEmail")?.value.trim();
-      if (!orderId || !email) return alert("请输入订单号和邮箱");
+      if (!orderId) return alert("请输入订单号");
       const btn = document.getElementById("orderLookupSubmitBtn");
       btn.disabled = true;
       try {
-        const r = await fetch(`${API}/api/order/lookup?orderId=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}`);
+        const r = await fetch(`${API}/api/order/status?orderId=${encodeURIComponent(orderId)}&deviceId=${encodeURIComponent(deviceId)}`);
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
-        saveOrderEmail(email);
         document.getElementById("lookupResultMessage").textContent = d.message || "";
         const codeWrap = document.getElementById("lookupCodeWrap");
         if (d.status === "fulfilled" && d.code) {
@@ -1152,7 +1125,6 @@
       stopOrderPolling();
       resetSubmitOrderState();
       resetOrderInfo();
-      getOrderEmail();
       updateModalModeUI();
       renderPricingCards();
       els.activateModal.classList.add("show");
@@ -1170,7 +1142,6 @@
       stopOrderPolling();
       resetSubmitOrderState();
       resetOrderInfo();
-      getOrderEmail();
       updateModalModeUI();
       renderPricingCards();
       els.activateModal.classList.add("show");
@@ -1285,7 +1256,7 @@
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
       updatePaymentNote(plans);
       if (contactEl) {
-        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "选套餐 → 填邮箱 → 提交订单 → 付款备注订单号 → 查订单取码"}</strong>`;
+        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "选套餐 → 提交订单 → 付款备注订单号 → 等待邀请码出现"}</strong>`;
       }
       updateInventoryWarn();
       updateDevicePolicyNote();

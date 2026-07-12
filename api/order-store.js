@@ -82,7 +82,22 @@ function orderStatusMessage(order) {
   if (order.status === "cancelled") {
     return "订单已取消，如有疑问请联系客服。";
   }
-  return `订单待确认收款。请付款时在备注填写订单号 ${order.orderId}。确认后您可在「查询订单」查看邀请码，或由客服发送给您。`;
+  return `订单待确认收款。请付款时在备注填写订单号 ${order.orderId}。确认后邀请码将自动显示在下方。`;
+}
+
+export function verifyAdminFulfillToken(token, env = process.env) {
+  const expected = String(env.ADMIN_FULFILL_TOKEN || "").trim();
+  const given = String(token || "").trim();
+  if (!expected || !given || given.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
+
+export function buildAdminFulfillUrl(orderId, env = process.env) {
+  const token = String(env.ADMIN_FULFILL_TOKEN || "").trim();
+  if (!token) return "";
+  const siteUrl = String(env.SITE_URL || "www.kjdsai.cn").replace(/^https?:\/\//, "");
+  const params = new URLSearchParams({ orderId, token });
+  return `https://${siteUrl}/api/order/fulfill?${params.toString()}`;
 }
 
 export function isManualPaymentMode(env = process.env) {
@@ -90,16 +105,9 @@ export function isManualPaymentMode(env = process.env) {
   return raw !== "false" && raw !== "0" && raw !== "off";
 }
 
-export function createOrder({ deviceId, email, planId, type }, env = process.env) {
+export function createOrder({ deviceId, planId, type }, env = process.env) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");
-    error.status = 400;
-    throw error;
-  }
-
-  const normalizedEmail = normalizeEmail(email);
-  if (!isValidEmail(normalizedEmail)) {
-    const error = new Error("请输入有效的邮箱地址，用于接收邀请码");
     error.status = 400;
     throw error;
   }
@@ -158,7 +166,7 @@ export function createOrder({ deviceId, email, planId, type }, env = process.env
     orderId,
     type: normalizedType,
     deviceId: deviceId.trim(),
-    email: normalizedEmail,
+    email: "",
     planId: normalizedPlanId,
     amountLabel,
     status: "pending",
@@ -175,7 +183,8 @@ export function createOrder({ deviceId, email, planId, type }, env = process.env
     paymentInstructions: `请扫码支付 ${amountLabel}，并在付款备注中填写：${orderId}`,
   };
 
-  void notifyAdminNewOrder(formatted, env).catch(() => {});
+  const fulfillUrl = buildAdminFulfillUrl(orderId, env);
+  void notifyAdminNewOrder(formatted, env, fulfillUrl).catch(() => {});
 
   return formatted;
 }
@@ -211,35 +220,17 @@ export function getOrderStatus(orderId, deviceId) {
   return formatOrderResponse(order);
 }
 
-export function lookupOrder(orderId, email, env = process.env) {
-  const normalizedId = String(orderId || "").trim().toUpperCase();
-  const normalizedEmail = normalizeEmail(email);
+export function lookupOrder(orderId, deviceId) {
+  return getOrderStatus(orderId, deviceId);
+}
 
-  if (!normalizedId) {
-    const error = new Error("请输入订单号");
-    error.status = 400;
-    throw error;
-  }
-  if (!isValidEmail(normalizedEmail)) {
-    const error = new Error("请输入下单时填写的邮箱");
-    error.status = 400;
-    throw error;
-  }
-
-  const store = loadOrdersStore();
-  const order = store.orders[normalizedId];
-  if (!order) {
-    const error = new Error("未找到订单，请检查订单号和邮箱");
-    error.status = 404;
-    throw error;
-  }
-  if (order.email !== normalizedEmail) {
-    const error = new Error("订单号与邮箱不匹配");
+export async function fulfillOrderIfAuthorized(orderId, token, env = process.env) {
+  if (!verifyAdminFulfillToken(token, env)) {
+    const error = new Error("确认链接无效，请检查 ADMIN_FULFILL_TOKEN 或改用命令行确认");
     error.status = 403;
     throw error;
   }
-
-  return formatOrderResponse(order);
+  return fulfillOrder(orderId, env);
 }
 
 export function listOrders({ status } = {}) {
@@ -301,7 +292,7 @@ export async function fulfillOrder(orderId, env = process.env) {
   const adminNotify = await notifyAdminFulfillCode(formatted, code, env);
 
   let userEmailResult = { sent: false };
-  if (shouldNotifyUserEmail(env)) {
+  if (shouldNotifyUserEmail(env) && isValidEmail(order.email)) {
     userEmailResult = await sendOrderCodeEmail(
       {
         to: order.email,

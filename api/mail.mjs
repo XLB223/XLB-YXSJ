@@ -188,7 +188,7 @@ export async function sendWeChatNotify(title, content, env = process.env) {
   return { sent: false, error: "未配置 PUSHPLUS_TOKEN 或 SERVERCHAN_SENDKEY" };
 }
 
-export async function notifyAdminNewOrder(order, env = process.env) {
+export async function notifyAdminNewOrder(order, env = process.env, fulfillUrl = "") {
   const adminEmail = adminNotifyEmail(env);
   const planName = order.planName || order.planId;
   const typeLabel = order.type === "upgrade" ? "升级" : "开通";
@@ -200,13 +200,17 @@ export async function notifyAdminNewOrder(order, env = process.env) {
     `类型：${typeLabel}`,
     `套餐：${planName}`,
     `金额：${order.amountLabel}`,
-    `用户邮箱：${order.email}`,
     `下单时间：${order.createdAt}`,
     "",
     "请打开微信/支付宝收款记录，核对备注中的订单号与金额。",
-    "确认收款后在服务器执行：",
-    `node scripts/fulfill-order.mjs ${order.orderId}`,
-  ].join("\n");
+    fulfillUrl
+      ? "确认收款后，点击下面链接发放邀请码（用户付款页将自动显示）："
+      : "确认收款后在服务器执行：",
+    fulfillUrl || `node scripts/fulfill-order.mjs ${order.orderId}`,
+    fulfillUrl ? fulfillUrl : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const emailResult = adminEmail
     ? await sendEmail({ to: adminEmail, subject: title, text }, env)
@@ -220,28 +224,25 @@ export async function notifyAdminFulfillCode(order, code, env = process.env) {
   const adminEmail = adminNotifyEmail(env);
   const planName = order.planName || order.planId;
   const typeLabel = order.type === "upgrade" ? "升级邀请码" : "会员邀请码";
-  const title = `【请转发给用户】${order.orderId} ${typeLabel}`;
+  const title = `【已发码】${order.orderId}`;
   const text = [
-    "订单已确认收款，请把邀请码发给用户：",
+    "订单已确认收款，邀请码已发放：",
     "",
     `订单号：${order.orderId}`,
-    `用户邮箱：${order.email}`,
     `套餐：${planName}（${order.amountLabel}）`,
     `${typeLabel}：${code}`,
     "",
-    "可复制发给用户：",
-    "---",
-    `您的${typeLabel}：${code}`,
-    "打开 https://" + (env.SITE_URL || "www.kjdsai.cn").replace(/^https?:\/\//, ""),
-    "→ 开通/升级弹窗 → 手动输入邀请码 → 确认开通",
-    "也可在网站「查询订单」输入订单号和邮箱查看。",
-    "---",
+    "用户付款页面的订单号下方会自动显示此邀请码，无需手动转发。",
   ].join("\n");
 
   const emailResult = adminEmail
     ? await sendEmail({ to: adminEmail, subject: title, text }, env)
     : { sent: false, error: "未配置 ADMIN_NOTIFY_EMAIL" };
-  const wechatResult = await sendWeChatNotify(title, `${typeLabel}：${code}\n用户：${order.email}\n套餐：${planName}`, env);
+  const wechatResult = await sendWeChatNotify(
+    title,
+    `${typeLabel}：${code}\n套餐：${planName}\n用户付款页已自动显示`,
+    env
+  );
 
   return { email: emailResult, wechat: wechatResult };
 }

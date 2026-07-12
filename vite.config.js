@@ -1,6 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -232,7 +232,6 @@ export default defineConfig(({ mode }) => {
                   const result = createOrder(
                     {
                       deviceId: payload.deviceId,
-                      email: payload.email,
                       planId: payload.planId,
                       type: payload.type || "purchase",
                     },
@@ -253,7 +252,7 @@ export default defineConfig(({ mode }) => {
             if (url.startsWith("/api/order/lookup")) {
               try {
                 const query = new URL(req.url, "http://localhost").searchParams;
-                const result = lookupOrder(query.get("orderId"), query.get("email"), env);
+                const result = lookupOrder(query.get("orderId"), query.get("deviceId"));
                 res.statusCode = 200;
                 res.setHeader("Content-Type", "application/json; charset=utf-8");
                 res.end(JSON.stringify(result));
@@ -261,6 +260,29 @@ export default defineConfig(({ mode }) => {
                 res.statusCode = error.status || 500;
                 res.setHeader("Content-Type", "application/json; charset=utf-8");
                 res.end(JSON.stringify({ error: error.message || "查询失败" }));
+              }
+              return;
+            }
+
+            if (url.startsWith("/api/order/fulfill")) {
+              try {
+                const query = new URL(req.url, "http://localhost").searchParams;
+                const result = await fulfillOrderIfAuthorized(
+                  query.get("orderId"),
+                  query.get("token"),
+                  env
+                );
+                res.statusCode = 200;
+                res.setHeader("Content-Type", "text/html; charset=utf-8");
+                res.end(
+                  `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>已确认收款</title></head><body><h1>已确认收款</h1><p>${result.message || "邀请码已发放"}</p><p>订单号：${result.orderId || ""}</p><p>邀请码：${result.code || ""}</p></body></html>`
+                );
+              } catch (error) {
+                res.statusCode = error.status || 500;
+                res.setHeader("Content-Type", "text/html; charset=utf-8");
+                res.end(
+                  `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>确认失败</title></head><body><h1>确认失败</h1><p>${error.message || "无法确认此订单"}</p></body></html>`
+                );
               }
               return;
             }

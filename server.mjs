@@ -5,7 +5,7 @@ import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, isManualPaymentMode } from "./api/order-store.js";
+import { createOrder, lookupOrder, getOrderStatus, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -47,6 +47,38 @@ function sendJson(res, status, data) {
   setCorsHeaders(res);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
+}
+
+function sendHtml(res, status, html) {
+  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+function renderFulfillPage({ title, message, code, orderId, ok }) {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 520px; margin: 48px auto; padding: 0 16px; color: #111827; }
+    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; background: #fff; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; color: ${ok ? "#166534" : "#b91c1c"}; }
+    p { line-height: 1.6; margin: 0 0 10px; }
+    .code { display: inline-block; margin-top: 8px; padding: 8px 12px; border-radius: 8px; background: #eff6ff; border: 1px dashed #60a5fa; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${title}</h1>
+    <p>${message}</p>
+    ${orderId ? `<p>订单号：<strong>${orderId}</strong></p>` : ""}
+    ${code ? `<p>邀请码：<span class="code">${code}</span></p>` : ""}
+    ${ok ? "<p>用户付款页面的订单号下方会自动显示邀请码。</p>" : ""}
+  </div>
+</body>
+</html>`;
 }
 
 function readBody(req) {
@@ -194,7 +226,6 @@ async function handleRequest(req, res) {
       const result = createOrder(
         {
           deviceId: payload.deviceId,
-          email: payload.email,
           planId: payload.planId,
           type: payload.type || "purchase",
         },
@@ -215,10 +246,43 @@ async function handleRequest(req, res) {
   if (url.startsWith("/api/order/lookup")) {
     try {
       const query = new URL(req.url, "http://localhost").searchParams;
-      const result = lookupOrder(query.get("orderId"), query.get("email"), env);
+      const result = lookupOrder(query.get("orderId"), query.get("deviceId"));
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, error.status || 500, { error: error.message || "查询失败" });
+    }
+    return;
+  }
+
+  if (url.startsWith("/api/order/fulfill")) {
+    try {
+      const query = new URL(req.url, "http://localhost").searchParams;
+      const result = await fulfillOrderIfAuthorized(
+        query.get("orderId"),
+        query.get("token"),
+        env
+      );
+      sendHtml(
+        res,
+        200,
+        renderFulfillPage({
+          ok: true,
+          title: "已确认收款",
+          message: result.message || "邀请码已发放。",
+          orderId: result.orderId,
+          code: result.code,
+        })
+      );
+    } catch (error) {
+      sendHtml(
+        res,
+        error.status || 500,
+        renderFulfillPage({
+          ok: false,
+          title: "确认失败",
+          message: error.message || "无法确认此订单",
+        })
+      );
     }
     return;
   }
