@@ -788,6 +788,20 @@
       <p class="modal-sub" id="pricingTrialNote">免费试用每天 3 次，试用结束后可开通会员。</p>
       <div class="current-plan-banner hidden" id="currentPlanBanner"></div>
       <div class="pricing-grid" id="pricingGrid"></div>
+      <p class="payment-note" id="paymentNote">请先选择套餐，填写邮箱并提交订单，付款时在备注填写订单号</p>
+      <div class="payment-section" id="paymentSection">
+        <div class="payment-qr-row">
+          <div class="payment-qr-item">
+            <img id="wechatPayQr" src="/assets/payment/wechat-pay.png" alt="微信收款码" />
+            <span>微信支付</span>
+          </div>
+          <div class="payment-qr-item">
+            <img id="alipayPayQr" src="/assets/payment/alipay-pay.png" alt="支付宝收款码" />
+            <span>支付宝</span>
+          </div>
+        </div>
+        <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
+      </div>
       <div class="invite-input-block">
         <label class="activate-label" for="orderEmailInput">接收邀请码的邮箱</label>
         <input type="email" id="orderEmailInput" placeholder="请先填写邮箱，再提交订单" autocomplete="email" />
@@ -804,20 +818,6 @@
         <p id="orderInfoMessage"></p>
         <div class="order-code-line hidden" id="orderCodeWrap">邀请码：<span class="order-id" id="orderCodeText"></span></div>
         <p class="order-polling-hint hidden" id="orderPollingHint">等待确认收款，邀请码将自动显示…</p>
-      </div>
-      <div class="payment-section hidden" id="paymentSection">
-        <p class="payment-note" id="paymentNote">② 请扫码支付，并在付款备注填写上方订单号</p>
-        <div class="payment-qr-row">
-          <div class="payment-qr-item">
-            <img id="wechatPayQr" src="/assets/payment/wechat-pay.png" alt="微信收款码" />
-            <span>微信支付</span>
-          </div>
-          <div class="payment-qr-item">
-            <img id="alipayPayQr" src="/assets/payment/alipay-pay.png" alt="支付宝收款码" />
-            <span>支付宝</span>
-          </div>
-        </div>
-        <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
       </div>
       <div class="inventory-warn hidden purchase-only" id="inventoryWarn"></div>
       <p class="device-policy-note purchase-only" id="devicePolicyNote"></p>
@@ -969,7 +969,6 @@
       idEl.textContent = order.orderId || "";
       msgEl.textContent = order.paymentInstructions || order.message || `请付款备注 ${order.orderId}`;
       box.classList.remove("hidden");
-      document.getElementById("paymentSection")?.classList.remove("hidden");
       showOrderCodeInBox(order.code, order.status === "fulfilled");
       if (pollHint) {
         pollHint.classList.toggle("hidden", order.status === "fulfilled" || order.status === "cancelled");
@@ -994,7 +993,7 @@
       document.getElementById("orderInfoBox")?.classList.add("hidden");
       document.getElementById("orderCodeWrap")?.classList.add("hidden");
       document.getElementById("orderPollingHint")?.classList.add("hidden");
-      document.getElementById("paymentSection")?.classList.add("hidden");
+      document.getElementById("paymentSection")?.classList.remove("hidden");
     }
 
     function setSubmitOrderDoneState() {
@@ -1239,9 +1238,9 @@
       const plan = (plans || []).find((p) => p.id === selectedPlanId);
       if (!paymentNoteEl) return;
       if (modalMode === "upgrade" && plan) {
-        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}），付款备注请填订单号。`;
+        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}）。先提交订单，付款备注请填订单号。`;
       } else if (plan) {
-        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款备注请填订单号。`;
+        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}）。先提交订单获取订单号，付款备注请填订单号。`;
       } else if (purchaseInfo?.payment?.note) {
         paymentNoteEl.textContent = purchaseInfo.payment.note;
       }
