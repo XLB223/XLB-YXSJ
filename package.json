@@ -11,7 +11,10 @@
     "test:api": "node test-api.mjs",
     "codes:list": "node scripts/list-codes.mjs",
     "codes:unbind": "node scripts/unbind-code.mjs",
-    "codes:upgrade": "node scripts/upgrade-plan.mjs"
+    "codes:upgrade": "node scripts/upgrade-plan.mjs",
+    "orders:list": "node scripts/list-orders.mjs",
+    "orders:pending": "node scripts/list-orders.mjs --pending",
+    "orders:fulfill": "node scripts/fulfill-order.mjs"
   },
   "devDependencies": {
     "vite": "^6.3.5"

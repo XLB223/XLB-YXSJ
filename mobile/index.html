@@ -370,6 +370,31 @@
       border-radius: 8px;
       font-size: .88rem;
     }
+    .order-info-box {
+      margin: 10px 0 12px;
+      padding: 12px;
+      border: 1px solid #93c5fd;
+      border-radius: 10px;
+      background: #eff6ff;
+      font-size: .82rem;
+      line-height: 1.55;
+    }
+    .order-info-box .order-id {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #fff;
+      border: 1px dashed #60a5fa;
+      font-weight: 700;
+    }
+    .btn-order-query {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: .72rem;
+    }
     .modal-box input {
       width: 100%;
       padding: 12px;
@@ -711,6 +736,7 @@
         <span id="pricingHint" class="plan-pricing hidden"></span>
       </div>
       <button type="button" class="btn-pro" id="activateBtn">开通会员</button>
+      <button type="button" class="btn-order-query" id="orderQueryBtn">查订单</button>
       <button type="button" class="btn-upgrade hidden" id="upgradeBtn">升级套餐</button>
     </div>
   </div>
@@ -755,6 +781,15 @@
         </div>
       </div>
       <p class="payment-site" id="paymentSite">www.kjdsai.cn</p>
+      <div class="invite-input-block">
+        <label class="activate-label" for="orderEmailInput">接收邀请码的邮箱</label>
+        <input type="email" id="orderEmailInput" placeholder="付款后邀请码将发到此邮箱" autocomplete="email" />
+      </div>
+      <div class="order-info-box hidden" id="orderInfoBox">
+        <strong>您的订单号</strong>
+        <div>订单号：<span class="order-id" id="orderIdText"></span></div>
+        <p id="orderInfoMessage"></p>
+      </div>
       <div class="inventory-warn hidden purchase-only" id="inventoryWarn"></div>
       <p class="device-policy-note purchase-only" id="devicePolicyNote"></p>
       <div class="revealed-code hidden" id="revealedCodeBox">
@@ -766,10 +801,10 @@
         <label class="activate-label" for="inviteCodeInput">邀请码</label>
         <input type="text" id="inviteCodeInput" placeholder="付款获取邀请码后，填入此处" autocomplete="off" />
       </div>
-      <p class="pricing-contact purchase-only" id="pricingContact">选择套餐 → 扫码付款 → 获取邀请码 → 填入并开通</p>
+      <p class="pricing-contact purchase-only" id="pricingContact">选套餐 → 填邮箱 → 提交订单 → 付款备注订单号 → 查订单取码</p>
       <div class="modal-actions" style="margin-top:10px">
-        <button type="button" class="btn-submit purchase-only" id="claimInviteBtn" style="flex:1">我已完成付款，获取邀请码</button>
-        <button type="button" class="btn-submit upgrade-only hidden" id="claimUpgradeBtn" style="flex:1">我已完成补差价，获取升级邀请码</button>
+        <button type="button" class="btn-submit purchase-only" id="submitOrderBtn" style="flex:1">提交订单</button>
+        <button type="button" class="btn-submit upgrade-only hidden" id="submitUpgradeOrderBtn" style="flex:1">提交升级订单</button>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="activateCancelBtn">取消</button>
@@ -778,10 +813,34 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="orderLookupModal">
+    <div class="modal-box">
+      <h3>查询订单</h3>
+      <div class="invite-input-block">
+        <label class="activate-label" for="lookupOrderId">订单号</label>
+        <input type="text" id="lookupOrderId" placeholder="如 KJ-20260711-A3F9" autocomplete="off" />
+      </div>
+      <div class="invite-input-block">
+        <label class="activate-label" for="lookupOrderEmail">邮箱</label>
+        <input type="email" id="lookupOrderEmail" placeholder="下单时填写的邮箱" autocomplete="email" />
+      </div>
+      <div class="order-info-box hidden" id="lookupResultBox">
+        <strong>订单状态</strong>
+        <p id="lookupResultMessage"></p>
+        <div class="hidden" id="lookupCodeWrap">邀请码：<span class="order-id" id="lookupCodeText"></span></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="orderLookupCloseBtn">关闭</button>
+        <button type="button" class="btn-submit" id="orderLookupSubmitBtn">查询</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API = "";
     const HISTORY_KEY = "listingProductHistory";
     const DEVICE_KEY = "listingDeviceId";
+    const ORDER_EMAIL_KEY = "listingOrderEmail";
     const MAX_HISTORY = 30;
 
     function getDeviceId() {
@@ -861,8 +920,8 @@
       if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
       if (noteEl) {
         noteEl.textContent = isUpgrade
-          ? "选择升级套餐 → 扫码付补差价 → 获取升级邀请码 → 填入并升级"
-          : purchaseInfo?.trialNote || "免费试用每天 3 次，付款后获取邀请码并填入下方开通会员。";
+          ? "选升级套餐 → 填邮箱 → 提交订单 → 付款备注订单号 → 查订单取码"
+          : purchaseInfo?.trialNote || "免费试用每天 3 次。开通：选套餐 → 填邮箱 → 提交订单。";
       }
       if (bannerEl) {
         if (isUpgrade && currentUsage?.isPro) {
@@ -879,9 +938,96 @@
       }
     }
 
+    function showOrderInfo(order) {
+      const box = document.getElementById("orderInfoBox");
+      const idEl = document.getElementById("orderIdText");
+      const msgEl = document.getElementById("orderInfoMessage");
+      if (!box || !idEl || !msgEl || !order) return;
+      idEl.textContent = order.orderId || "";
+      msgEl.textContent = order.paymentInstructions || order.message || `请付款备注 ${order.orderId}`;
+      box.classList.remove("hidden");
+    }
+
+    function resetOrderInfo() {
+      document.getElementById("orderInfoBox")?.classList.add("hidden");
+    }
+
+    function getOrderEmail() {
+      const input = document.getElementById("orderEmailInput");
+      const saved = localStorage.getItem(ORDER_EMAIL_KEY) || "";
+      if (input && !input.value && saved) input.value = saved;
+      return input?.value.trim() || "";
+    }
+
+    function saveOrderEmail(email) {
+      if (email) localStorage.setItem(ORDER_EMAIL_KEY, email);
+    }
+
+    async function submitOrder(type) {
+      const email = getOrderEmail();
+      if (!email) return alert("请填写邮箱");
+      if (!selectedPlanId) return alert(type === "upgrade" ? "请选择升级套餐" : "请选择套餐");
+      const btn = type === "upgrade" ? document.getElementById("submitUpgradeOrderBtn") : document.getElementById("submitOrderBtn");
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = "提交中...";
+      try {
+        const r = await fetch(`${API}/api/order/create`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, email, planId: selectedPlanId, type }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        saveOrderEmail(email);
+        showOrderInfo(d);
+        toast("订单已创建，请付款并备注订单号");
+      } catch (e) {
+        alert(e.message || "提交订单失败");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = oldText;
+      }
+    }
+
+    function openOrderLookupModal() {
+      document.getElementById("lookupOrderEmail").value = localStorage.getItem(ORDER_EMAIL_KEY) || getOrderEmail();
+      document.getElementById("lookupResultBox")?.classList.add("hidden");
+      document.getElementById("orderLookupModal")?.classList.add("show");
+    }
+
+    async function lookupOrderNow() {
+      const orderId = document.getElementById("lookupOrderId")?.value.trim();
+      const email = document.getElementById("lookupOrderEmail")?.value.trim();
+      if (!orderId || !email) return alert("请输入订单号和邮箱");
+      const btn = document.getElementById("orderLookupSubmitBtn");
+      btn.disabled = true;
+      try {
+        const r = await fetch(`${API}/api/order/lookup?orderId=${encodeURIComponent(orderId)}&email=${encodeURIComponent(email)}`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        saveOrderEmail(email);
+        document.getElementById("lookupResultMessage").textContent = d.message || "";
+        const codeWrap = document.getElementById("lookupCodeWrap");
+        if (d.status === "fulfilled" && d.code) {
+          codeWrap?.classList.remove("hidden");
+          document.getElementById("lookupCodeText").textContent = d.code;
+        } else {
+          codeWrap?.classList.add("hidden");
+        }
+        document.getElementById("lookupResultBox")?.classList.remove("hidden");
+      } catch (e) {
+        alert(e.message || "查询失败");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
     function openPurchaseModal() {
       modalMode = "purchase";
       resetActivateModalView();
+      resetOrderInfo();
+      getOrderEmail();
       updateModalModeUI();
       renderPricingCards();
       els.activateModal.classList.add("show");
@@ -895,6 +1041,8 @@
       modalMode = "upgrade";
       selectedPlanId = currentUsage.upgradeOptions[0].id;
       resetActivateModalView();
+      resetOrderInfo();
+      getOrderEmail();
       updateModalModeUI();
       renderPricingCards();
       els.activateModal.classList.add("show");
@@ -974,9 +1122,9 @@
       const plan = (plans || []).find((p) => p.id === selectedPlanId);
       if (!paymentNoteEl) return;
       if (modalMode === "upgrade" && plan) {
-        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}），付款后点击「获取升级邀请码」`;
+        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}），付款备注请填订单号。`;
       } else if (plan) {
-        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款后点击「获取邀请码」`;
+        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}），付款备注请填订单号。`;
       } else if (purchaseInfo?.payment?.note) {
         paymentNoteEl.textContent = purchaseInfo.payment.note;
       }
@@ -1021,7 +1169,7 @@
       alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
       updatePaymentNote(plans);
       if (contactEl) {
-        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "选择套餐 → 扫码付款 → 获取邀请码 → 填入并开通"}</strong>`;
+        contactEl.innerHTML = `<strong>${purchaseInfo?.contact || "选套餐 → 填邮箱 → 提交订单 → 付款备注订单号 → 查订单取码"}</strong>`;
       }
       updateInventoryWarn();
       updateDevicePolicyNote();
@@ -1091,60 +1239,12 @@
     els.activateBtn.onclick = openPurchaseModal;
     document.getElementById("upgradeBtn").onclick = openUpgradeModal;
     document.getElementById("activateCancelBtn").onclick = () => els.activateModal.classList.remove("show");
-    document.getElementById("claimInviteBtn").onclick = async () => {
-      const btn = document.getElementById("claimInviteBtn");
-      if (!selectedPlanId) {
-        alert("请选择套餐");
-        return;
-      }
-      btn.disabled = true;
-      btn.textContent = "获取中...";
-      try {
-        const r = await fetch(`${API}/api/purchase`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, planId: selectedPlanId }),
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error);
-        if (d.alreadyPro) {
-          alert(d.message || "您已是会员");
-          return;
-        }
-        showRevealedCode(d.code || "", d.message || "请填入下方邀请码并开通");
-        toast("邀请码已生成，请手动填入下方输入框后再点「输入邀请码并开通」");
-      } catch (e) {
-        alert(e.message || "获取邀请码失败");
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "我已完成付款，获取邀请码";
-      }
-    };
-    document.getElementById("claimUpgradeBtn").onclick = async () => {
-      const btn = document.getElementById("claimUpgradeBtn");
-      if (!selectedPlanId) {
-        alert("请选择升级套餐");
-        return;
-      }
-      btn.disabled = true;
-      btn.textContent = "获取中...";
-      try {
-        const r = await fetch(`${API}/api/claim-upgrade`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId, planId: selectedPlanId }),
-        });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error);
-        showRevealedCode(d.code || "", d.message || "请填入下方邀请码并升级");
-        toast("升级邀请码已生成，请手动填入下方输入框后再点「输入邀请码并升级」");
-      } catch (e) {
-        alert(e.message || "获取升级邀请码失败");
-      } finally {
-        btn.disabled = false;
-        btn.textContent = "我已完成补差价，获取升级邀请码";
-      }
-    };
+    document.getElementById("submitOrderBtn").onclick = () => submitOrder("purchase");
+    document.getElementById("submitUpgradeOrderBtn").onclick = () => submitOrder("upgrade");
+    document.getElementById("orderQueryBtn").onclick = openOrderLookupModal;
+    document.getElementById("orderLookupSubmitBtn").onclick = lookupOrderNow;
+    document.getElementById("orderLookupCloseBtn").onclick = () =>
+      document.getElementById("orderLookupModal").classList.remove("show");
     document.getElementById("confirmInviteBtn").onclick = async () => {
       const code = els.inviteCodeInput?.value.trim();
       if (!code) {

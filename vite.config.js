@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
+import { createOrder, lookupOrder, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
@@ -87,6 +88,12 @@ export default defineConfig(({ mode }) => {
               });
               req.on("end", () => {
                 try {
+                  if (isManualPaymentMode(env)) {
+                    res.statusCode = 403;
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    res.end(JSON.stringify({ error: "请提交订单并等待确认收款，勿直接领取邀请码" }));
+                    return;
+                  }
                   const payload = body ? JSON.parse(body) : {};
                   const result = claimPurchaseCode(payload.deviceId, payload.planId, env);
                   res.statusCode = 200;
@@ -119,6 +126,12 @@ export default defineConfig(({ mode }) => {
               });
               req.on("end", () => {
                 try {
+                  if (isManualPaymentMode(env)) {
+                    res.statusCode = 403;
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    res.end(JSON.stringify({ error: "请提交升级订单并等待确认收款，勿直接领取邀请码" }));
+                    return;
+                  }
                   const payload = body ? JSON.parse(body) : {};
                   const result = claimUpgradeCode(payload.deviceId, payload.planId, env);
                   res.statusCode = 200;
@@ -194,6 +207,61 @@ export default defineConfig(({ mode }) => {
                   res.end(JSON.stringify({ error: error.message || "激活失败" }));
                 }
               });
+              return;
+            }
+
+            if (url === "/api/order/create") {
+              if (req.method === "OPTIONS") {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
+              if (req.method !== "POST") {
+                res.statusCode = 405;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              let body = "";
+              req.on("data", (chunk) => {
+                body += chunk;
+              });
+              req.on("end", () => {
+                try {
+                  const payload = body ? JSON.parse(body) : {};
+                  const result = createOrder(
+                    {
+                      deviceId: payload.deviceId,
+                      email: payload.email,
+                      planId: payload.planId,
+                      type: payload.type || "purchase",
+                    },
+                    env
+                  );
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify(result));
+                } catch (error) {
+                  res.statusCode = error.status || 500;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ error: error.message || "创建订单失败" }));
+                }
+              });
+              return;
+            }
+
+            if (url.startsWith("/api/order/lookup")) {
+              try {
+                const query = new URL(req.url, "http://localhost").searchParams;
+                const result = lookupOrder(query.get("orderId"), query.get("email"), env);
+                res.statusCode = 200;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify(result));
+              } catch (error) {
+                res.statusCode = error.status || 500;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: error.message || "查询失败" }));
+              }
               return;
             }
 
