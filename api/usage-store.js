@@ -343,7 +343,29 @@ export function activateDevice(deviceId, code, env = process.env) {
   };
 }
 
+function isManualPaymentOrders(env = process.env) {
+  const raw = String(env.MANUAL_PAYMENT_ORDERS ?? "true").trim().toLowerCase();
+  return raw !== "false" && raw !== "0" && raw !== "off";
+}
+
+function unlimitedPlanInventory() {
+  return { total: null, available: null, ready: true, unlimited: true };
+}
+
 export function getActivationInventory(env = process.env) {
+  if (isManualPaymentOrders(env)) {
+    return {
+      configured: true,
+      unlimited: true,
+      oneCodeOneDevice: true,
+      plans: {
+        month: unlimitedPlanInventory(),
+        half: unlimitedPlanInventory(),
+        year: unlimitedPlanInventory(),
+      },
+    };
+  }
+
   const store = loadStore();
   const used = getUsedCodesSet(store);
   const plans = ["month", "half", "year"];
@@ -552,6 +574,46 @@ function applyUpgradeToDevice(deviceId, targetPlanId, store, meta = {}) {
     targetPlan,
     diffPrice,
     expiresAt: expiresAt.toISOString(),
+  };
+}
+
+export function applyOrderPurchase(deviceId, planId, orderId, env = process.env) {
+  const normalizedPlanId = String(planId || "").trim();
+  const plan = getPlanById(normalizedPlanId);
+  if (!plan) {
+    const error = new Error("请选择有效的会员套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  if (isProDevice(deviceId, env)) {
+    const error = new Error("您已是会员，无需重复开通");
+    error.status = 400;
+    throw error;
+  }
+
+  const syntheticCode = `ORDER-${String(orderId || "").trim().toUpperCase()}`;
+  const result = applyPlanToDevice(
+    deviceId,
+    normalizedPlanId,
+    {
+      source: "order-purchase",
+      code: syntheticCode,
+      orderId: String(orderId || "").trim(),
+    },
+    env
+  );
+
+  const store = loadStore();
+  if (store.pendingClaims?.[deviceId]) {
+    delete store.pendingClaims[deviceId];
+  }
+  saveStore(store);
+
+  return {
+    ...getUsageStatus(deviceId, env),
+    ...result,
+    message: `${result.planName}已开通，已绑定本电脑，其他电脑无法同时使用。换电脑请联系客服解绑。有效期至 ${formatDate(result.expiresAt)}`,
   };
 }
 
@@ -837,6 +899,17 @@ export function adminUpgradePlan(lookup, targetPlanId, env = process.env) {
 }
 
 export function getUpgradeInventory(env = process.env) {
+  if (isManualPaymentOrders(env)) {
+    return {
+      configured: true,
+      unlimited: true,
+      plans: {
+        half: unlimitedPlanInventory(),
+        year: unlimitedPlanInventory(),
+      },
+    };
+  }
+
   const store = loadStore();
   const used = getUsedUpgradeCodesSet(store);
   const plans = ["half", "year"];

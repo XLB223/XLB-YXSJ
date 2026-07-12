@@ -9,11 +9,11 @@ import {
 } from "./pricing-plans.js";
 import {
   getUsageStatus,
-  claimPurchaseCode,
+  isProDevice,
   applyOrderUpgrade,
+  applyOrderPurchase,
 } from "./usage-store.js";
 import {
-  sendOrderCodeEmail,
   notifyAdminNewOrder,
   notifyAdminFulfillCode,
 } from "./mail.mjs";
@@ -69,6 +69,7 @@ function formatOrderResponse(order) {
     fulfilledAt: order.fulfilledAt || null,
     adminNotified: Boolean(order.adminNotified),
     upgradeApplied: Boolean(order.upgradeApplied),
+    activationApplied: Boolean(order.activationApplied),
     code: order.status === "fulfilled" ? order.code : null,
     message: orderStatusMessage(order),
   };
@@ -81,7 +82,9 @@ function orderStatusMessage(order) {
         ? "已确认收款，会员套餐已升级完成。"
         : "已确认收款，升级邀请码已填入下方，请点击升级。";
     }
-    return "已确认收款，邀请码已填入下方，请点击开通。";
+    return order.activationApplied
+      ? "已确认收款，会员已开通完成。"
+      : "已确认收款，邀请码已填入下方，请点击开通。";
   }
   if (order.status === "cancelled") {
     return "订单已取消，如有疑问请联系客服。";
@@ -89,7 +92,9 @@ function orderStatusMessage(order) {
   if (!order.adminNotified) {
     return `订单号 ${order.orderId}。请点击「发送通知」，等待管理员确认收款。`;
   }
-  return `订单号 ${order.orderId}。通知已发送，请等待管理员确认，邀请码将自动填入下方。`;
+  return order.type === "upgrade"
+    ? `订单号 ${order.orderId}。通知已发送，请等待管理员确认，确认后自动升级。`
+    : `订单号 ${order.orderId}。通知已发送，请等待管理员确认，确认后自动开通。`;
 }
 
 export function verifyAdminFulfillToken(token, env = process.env) {
@@ -344,13 +349,47 @@ export async function fulfillOrder(orderId, env = process.env) {
         };
       }
     }
+    if (order.type === "purchase" && !order.activationApplied) {
+      if (isProDevice(order.deviceId, env)) {
+        order.activationApplied = true;
+        store.orders[normalizedId] = order;
+        saveOrdersStore(store);
+        return {
+          ...formatOrderResponse(order),
+          emailSent: false,
+          activationApplied: true,
+          message: "订单已确认，会员已开通完成",
+        };
+      }
+      try {
+        const activationResult = applyOrderPurchase(order.deviceId, order.planId, order.orderId, env);
+        order.activationApplied = true;
+        order.code = order.orderId;
+        store.orders[normalizedId] = order;
+        saveOrdersStore(store);
+        return {
+          ...formatOrderResponse(order),
+          emailSent: false,
+          activationApplied: true,
+          message: activationResult.message || "会员已开通完成",
+        };
+      } catch (error) {
+        return {
+          ...formatOrderResponse(order),
+          emailSent: false,
+          message: error.message || "订单已确认，但自动开通失败，请联系管理员",
+        };
+      }
+    }
     return {
       ...formatOrderResponse(order),
       emailSent: false,
       message:
         order.type === "upgrade" && order.upgradeApplied
           ? "订单已确认，会员已升级完成"
-          : "订单已发过邀请码，无需重复确认",
+          : order.type === "purchase" && order.activationApplied
+            ? "订单已确认，会员已开通完成"
+            : "订单已发过邀请码，无需重复确认",
     };
   }
   if (order.status === "cancelled") {
@@ -358,8 +397,6 @@ export async function fulfillOrder(orderId, env = process.env) {
     error.status = 400;
     throw error;
   }
-
-  let claimResult;
 
   if (order.type === "upgrade") {
     const upgradeResult = applyOrderUpgrade(order.deviceId, order.planId, order.orderId, env);
@@ -393,61 +430,35 @@ export async function fulfillOrder(orderId, env = process.env) {
     };
   }
 
-  claimResult = claimPurchaseCode(order.deviceId, order.planId, env, { skipClaimLimit: true });
-
-  const code = claimResult.code;
-  if (!code) {
-    const error = new Error("发码失败：邀请码库存不足");
-    error.status = 503;
-    throw error;
-  }
-
+  const activationResult = applyOrderPurchase(order.deviceId, order.planId, order.orderId, env);
   order.status = "fulfilled";
-  order.code = code;
+  order.code = order.orderId;
+  order.activationApplied = true;
   order.fulfilledAt = new Date().toISOString();
   store.orders[normalizedId] = order;
   saveOrdersStore(store);
 
-  const siteUrl = env.SITE_URL || "www.kjdsai.cn";
   const formatted = formatOrderResponse(order);
-
-  const adminNotify = await notifyAdminFulfillCode(formatted, code, env);
-
-  let userEmailResult = { sent: false };
-  if (shouldNotifyUserEmail(env) && isValidEmail(order.email)) {
-    userEmailResult = await sendOrderCodeEmail(
-      {
-        to: order.email,
-        orderId: order.orderId,
-        code,
-        planName: claimResult.planName || getPlanById(order.planId)?.name || "",
-        amountLabel: order.amountLabel,
-        type: order.type,
-        siteUrl,
-      },
-      env
-    );
-  }
+  const adminNotify = await notifyAdminFulfillCode(
+    formatted,
+    `订单 ${order.orderId} 开通完成`,
+    env
+  );
 
   const adminOk = adminNotify.email?.sent || adminNotify.wechat?.sent;
-  const parts = [`邀请码 ${code} 已生成`];
+  const parts = [activationResult.message || "会员已开通完成"];
   if (adminNotify.email?.sent) parts.push(`已发到你邮箱 ${adminNotifyEmail(env)}`);
   if (adminNotify.wechat?.sent) parts.push(`已推送到微信（${adminNotify.wechat.channel}）`);
   if (!adminOk) parts.push(`管理员通知失败：${adminNotify.email?.error || adminNotify.wechat?.error || "未配置"}`);
-  if (userEmailResult.sent) parts.push(`已发用户邮箱 ${order.email}`);
 
   return {
     ...formatted,
-    code,
+    code: order.orderId,
+    activationApplied: true,
     adminNotify,
-    userEmailSent: userEmailResult.sent,
+    userEmailSent: false,
     message: parts.join("；"),
   };
-}
-
-function shouldNotifyUserEmail(env = process.env) {
-  const raw = String(env.NOTIFY_USER_EMAIL ?? "false").trim().toLowerCase();
-  return raw === "true" || raw === "1" || raw === "on";
 }
 
 function adminNotifyEmail(env = process.env) {

@@ -1009,6 +1009,11 @@
       return currentTier >= orderTier;
     }
 
+    function isStalePurchaseOrder(order) {
+      if (!order || order.type !== "purchase" || order.status !== "fulfilled") return false;
+      return Boolean(order.activationApplied) || Boolean(currentUsage?.isPro);
+    }
+
     function getModalPlans() {
       const fallback = [
         { id: "month", name: "月卡", priceLabel: "¥29.9", period: "1 个月" },
@@ -1037,7 +1042,7 @@
       if (noteEl) {
         noteEl.textContent = isUpgrade
           ? "选升级套餐 → 扫码付补差价 → 我已付款 → 发送通知 → 等待确认 → 自动升级"
-          : purchaseInfo?.trialNote || "选套餐 → 扫码付款 → 我已付款 → 发送通知 → 等待邀请码 → 开通";
+          : "选套餐 → 扫码付款 → 我已付款 → 发送通知 → 等待确认 → 自动开通";
       }
       if (bannerEl) {
         if (isUpgrade && currentUsage?.isPro) {
@@ -1103,6 +1108,12 @@
         if (els.inviteCodeInput) els.inviteCodeInput.placeholder = "升级已完成";
         return;
       }
+      if (order.type === "purchase" && order.activationApplied) {
+        showOrderCodeInBox("", false);
+        updateOrderFlowUI(order, order.type);
+        if (els.inviteCodeInput) els.inviteCodeInput.placeholder = "开通已完成";
+        return;
+      }
       showOrderCodeInBox(order.code, order.status === "fulfilled");
       updateOrderFlowUI(order, order.type);
       if (!els.inviteCodeInput) return;
@@ -1110,16 +1121,18 @@
         els.inviteCodeInput.placeholder = order.type === "upgrade" ? "请点击升级" : "邀请码已填入";
       } else if (order.status === "pending" && order.adminNotified) {
         els.inviteCodeInput.placeholder =
-          order.type === "upgrade" ? "等待管理员确认，确认后自动升级…" : "等待管理员确认，邀请码将自动填入…";
+          order.type === "upgrade"
+            ? "等待管理员确认，确认后自动升级…"
+            : "等待管理员确认，确认后自动开通…";
       } else if (order.status === "pending") {
         els.inviteCodeInput.placeholder = "请先点「发送通知」";
       } else {
-        els.inviteCodeInput.placeholder = "确认收款后自动填入";
+        els.inviteCodeInput.placeholder = "确认收款后自动开通";
       }
     }
 
     function resetOrderInfo() {
-      if (els.inviteCodeInput) els.inviteCodeInput.placeholder = "确认收款后自动填入";
+      if (els.inviteCodeInput) els.inviteCodeInput.placeholder = "确认收款后自动开通";
     }
 
     function showOrderCodeInBox(code, show) {
@@ -1194,6 +1207,12 @@
           modalMode = "purchase";
           await refreshUsage();
           toast(d.message || "套餐已升级成功");
+        } else if (d.status === "fulfilled" && d.type === "purchase" && d.activationApplied) {
+          stopOrderPolling();
+          clearPendingOrder();
+          els.activateModal.classList.remove("show");
+          await refreshUsage();
+          toast(d.message || "会员已开通成功");
         } else if (d.status === "fulfilled" && d.code) {
           stopOrderPolling();
           toast(d.type === "upgrade" ? "升级邀请码已填入，请点击升级" : "邀请码已填入，请点击开通");
@@ -1223,7 +1242,7 @@
         resetActivateModalView();
         return;
       }
-      if (order.status === "cancelled" || isStaleUpgradeOrder(order)) {
+      if (order.status === "cancelled" || isStaleUpgradeOrder(order) || isStalePurchaseOrder(order)) {
         clearPendingOrder();
         updateOrderFlowUI(null, expectedType);
         resetActivateModalView();
@@ -1417,25 +1436,8 @@
         warnEl.classList.remove("hidden");
         return;
       }
-      const inv = purchaseInfo?.activationInventory;
-      if (!inv?.configured) {
-        warnEl.textContent =
-          "服务器尚未配置激活码（.env 中 ACTIVATION_CODES_*），请联系管理员配置后重启 pm2。";
-        warnEl.classList.remove("hidden");
-        return;
-      }
-      const planInv = inv.plans?.[selectedPlanId];
-      if (planInv && planInv.ready && planInv.available <= 0) {
-        warnEl.textContent = "该套餐邀请码已发完，请换套餐或稍后再试。";
-        warnEl.classList.remove("hidden");
-        return;
-      }
-      if (planInv && !planInv.ready) {
-        warnEl.textContent = "该套餐未配置邀请码，请选择其他套餐。";
-        warnEl.classList.remove("hidden");
-        return;
-      }
-      warnEl.classList.add("hidden");
+      warnEl.textContent = "付款后点击「发送通知」，管理员确认收款后自动开通会员。";
+      warnEl.classList.remove("hidden");
     }
 
     function updatePaymentNote(plans = getModalPlans()) {
