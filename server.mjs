@@ -409,6 +409,8 @@ async function handleRequest(req, res) {
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
       ".webp": "image/webp",
+      ".xml": "application/xml; charset=utf-8",
+      ".txt": "text/plain; charset=utf-8",
     };
 
     const headers = { "Content-Type": types[ext] || "text/plain; charset=utf-8" };

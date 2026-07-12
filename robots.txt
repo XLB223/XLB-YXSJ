@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+Sitemap: https://www.kjdsai.cn/sitemap.xml
