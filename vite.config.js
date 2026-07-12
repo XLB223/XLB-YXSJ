@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
 import { createOrder, lookupOrder, getOrderStatus, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
+import { sendContactMessage } from "./api/mail.mjs";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
 export default defineConfig(({ mode }) => {
@@ -45,6 +46,51 @@ export default defineConfig(({ mode }) => {
                   upgradeInventory: getUpgradeInventory(env),
                 })
               );
+              return;
+            }
+
+            if (url === "/api/contact") {
+              if (req.method === "OPTIONS") {
+                res.statusCode = 204;
+                res.end();
+                return;
+              }
+              if (req.method !== "POST") {
+                res.statusCode = 405;
+                res.setHeader("Content-Type", "application/json; charset=utf-8");
+                res.end(JSON.stringify({ error: "Method not allowed" }));
+                return;
+              }
+              let body = "";
+              req.on("data", (chunk) => {
+                body += chunk;
+              });
+              req.on("end", async () => {
+                try {
+                  const payload = body ? JSON.parse(body) : {};
+                  const result = await sendContactMessage(
+                    {
+                      message: payload.message,
+                      contact: payload.contact,
+                      deviceId: payload.deviceId,
+                    },
+                    env
+                  );
+                  if (!result.sent) {
+                    res.statusCode = 500;
+                    res.setHeader("Content-Type", "application/json; charset=utf-8");
+                    res.end(JSON.stringify({ error: result.error || "发送失败" }));
+                    return;
+                  }
+                  res.statusCode = 200;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ ok: true, message: result.message || "留言已发送" }));
+                } catch (error) {
+                  res.statusCode = error.status || 500;
+                  res.setHeader("Content-Type", "application/json; charset=utf-8");
+                  res.end(JSON.stringify({ error: error.message || "发送失败" }));
+                }
+              });
               return;
             }
 

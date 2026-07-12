@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
 import { createOrder, lookupOrder, getOrderStatus, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
+import { sendContactMessage } from "./api/mail.mjs";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -129,6 +130,34 @@ async function handleRequest(req, res) {
       activationInventory: getActivationInventory(env),
       upgradeInventory: getUpgradeInventory(env),
     });
+    return;
+  }
+
+  if (url === "/api/contact" && req.method === "POST") {
+    try {
+      const body = await readBody(req);
+      const payload = body ? JSON.parse(body) : {};
+      const result = await sendContactMessage(
+        {
+          message: payload.message,
+          contact: payload.contact,
+          deviceId: payload.deviceId,
+        },
+        env
+      );
+      if (!result.sent) {
+        sendJson(res, 500, { error: result.error || "发送失败" });
+        return;
+      }
+      sendJson(res, 200, { ok: true, message: result.message || "留言已发送" });
+    } catch (error) {
+      sendJson(res, error.status || 500, { error: error.message || "发送失败" });
+    }
+    return;
+  }
+
+  if (url === "/api/contact") {
+    sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
 

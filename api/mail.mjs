@@ -247,6 +247,38 @@ export async function notifyAdminFulfillCode(order, code, env = process.env) {
   return { email: emailResult, wechat: wechatResult };
 }
 
+export async function sendContactMessage({ message, contact, deviceId }, env = process.env) {
+  const adminEmail = adminNotifyEmail(env);
+  if (!adminEmail) {
+    return { sent: false, error: "未配置 ADMIN_NOTIFY_EMAIL" };
+  }
+  const normalizedMessage = String(message || "").trim();
+  if (!normalizedMessage) {
+    return { sent: false, error: "留言内容不能为空" };
+  }
+  if (normalizedMessage.length > 2000) {
+    return { sent: false, error: "留言内容过长（最多 2000 字）" };
+  }
+  const replyContact = String(contact || "").trim();
+  const subject = "【客服留言】跨境AI Listing";
+  const text = [
+    "网站用户留言：",
+    "",
+    normalizedMessage,
+    "",
+    replyContact ? `用户联系方式：${replyContact}` : "用户未留联系方式",
+    deviceId ? `设备ID：${deviceId}` : "",
+    `时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const result = await sendEmail({ to: adminEmail, subject, text }, env);
+  if (result.sent) {
+    return { sent: true, message: "留言已发送到客服邮箱" };
+  }
+  return result;
+}
+
 export async function sendOrderCodeEmail(
   { to, orderId, code, planName, amountLabel, type, siteUrl },
   env = process.env

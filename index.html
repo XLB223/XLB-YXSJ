@@ -384,6 +384,40 @@
       word-break: break-all;
     }
     .contact-email-block a:hover { text-decoration: underline; }
+    .contact-message-block {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      text-align: left;
+    }
+    .contact-message-block label {
+      display: block;
+      font-size: .78rem;
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .contact-message-block textarea,
+    .contact-message-block input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: .88rem;
+      font-family: inherit;
+      margin-bottom: 8px;
+    }
+    .contact-message-block textarea { min-height: 88px; resize: vertical; }
+    .contact-send-btn {
+      width: 100%;
+      padding: 11px;
+      border: none;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
     .payment-site { text-align: center; font-size: .72rem; color: var(--primary); margin-bottom: 10px; }
     .activate-label { display: block; font-size: .78rem; font-weight: 500; margin-bottom: 6px; }
     .invite-input-block { margin-bottom: 12px; }
@@ -830,6 +864,12 @@
           <span class="contact-label">电子邮箱</span>
           <a id="contactModalEmail" href="mailto:108729447@qq.com">108729447@qq.com</a>
         </div>
+        <div class="contact-message-block">
+          <label for="contactMessageInput">在线留言</label>
+          <textarea id="contactMessageInput" placeholder="请描述您的问题或需求…"></textarea>
+          <input type="text" id="contactReplyInput" placeholder="您的微信或邮箱（选填，方便回复）" />
+          <button type="button" class="contact-send-btn" id="contactSendBtn">发送留言到我的邮箱</button>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn-cancel" id="contactModalClose" style="flex:1">关闭</button>
@@ -864,12 +904,6 @@
       <div class="modal-actions order-flow-actions upgrade-only hidden">
         <button type="button" class="btn-submit" id="paidUpgradeBtn" style="flex:1">① 我已付款</button>
         <button type="button" class="btn-submit hidden" id="notifyUpgradeBtn" style="flex:1">② 发送通知</button>
-      </div>
-      <div class="order-info-box hidden" id="orderInfoBox">
-        <strong id="orderInfoTitle">您的订单号</strong>
-        <div>订单号：<span class="order-id" id="orderIdText"></span></div>
-        <p id="orderInfoMessage"></p>
-        <p class="order-polling-hint hidden" id="orderPollingHint">等待管理员确认，邀请码将自动填入下方…</p>
       </div>
       <div class="inventory-warn hidden purchase-only" id="inventoryWarn"></div>
       <div class="modal-section-gap activate-code-section">
@@ -1024,7 +1058,6 @@
     function updateOrderFlowUI(order, type) {
       const flowType = type || (modalMode === "upgrade" ? "upgrade" : "purchase");
       const { paid, notify } = getFlowButtons(flowType);
-      const pollHint = document.getElementById("orderPollingHint");
       if (!order?.orderId) {
         if (paid) {
           paid.disabled = false;
@@ -1035,7 +1068,6 @@
           notify.disabled = false;
           notify.textContent = "② 发送通知";
         }
-        if (pollHint) pollHint.classList.add("hidden");
         return;
       }
       if (paid) {
@@ -1047,39 +1079,34 @@
         if (order.status === "fulfilled") {
           notify.disabled = true;
           notify.textContent = "已确认";
-          if (pollHint) pollHint.classList.add("hidden");
         } else if (order.adminNotified) {
           notify.disabled = true;
           notify.textContent = "通知已发送";
-          if (pollHint) pollHint.classList.remove("hidden");
         } else {
           notify.disabled = false;
           notify.textContent = "② 发送通知";
-          if (pollHint) pollHint.classList.add("hidden");
         }
       }
     }
 
-    function showOrderInfo(order) {
-      const box = document.getElementById("orderInfoBox");
-      const idEl = document.getElementById("orderIdText");
-      const msgEl = document.getElementById("orderInfoMessage");
-      const pollHint = document.getElementById("orderPollingHint");
-      if (!box || !idEl || !msgEl || !order) return;
-      idEl.textContent = order.orderId || "";
-      msgEl.textContent =
-        order.paymentInstructions ||
-        order.message ||
-        `请付款时在备注填写 ${order.orderId}，确认后邀请码将自动显示。`;
-      box.classList.remove("hidden");
+    function applyOrderState(order) {
+      if (!order) return;
       showOrderCodeInBox(order.code, order.status === "fulfilled");
       updateOrderFlowUI(order, order.type);
-      if (pollHint) {
-        pollHint.classList.toggle(
-          "hidden",
-          order.status === "fulfilled" || order.status === "cancelled" || !order.adminNotified
-        );
+      if (!els.inviteCodeInput) return;
+      if (order.status === "fulfilled") {
+        els.inviteCodeInput.placeholder = "邀请码已填入";
+      } else if (order.status === "pending" && order.adminNotified) {
+        els.inviteCodeInput.placeholder = "等待管理员确认，邀请码将自动填入…";
+      } else if (order.status === "pending") {
+        els.inviteCodeInput.placeholder = "请先点「发送通知」";
+      } else {
+        els.inviteCodeInput.placeholder = "确认收款后自动填入";
       }
+    }
+
+    function resetOrderInfo() {
+      if (els.inviteCodeInput) els.inviteCodeInput.placeholder = "确认收款后自动填入";
     }
 
     function showOrderCodeInBox(code, show) {
@@ -1091,15 +1118,6 @@
       } else if (!code) {
         pendingRevealedCode = null;
       }
-    }
-
-    function resetOrderInfo() {
-      document.getElementById("orderInfoBox")?.classList.add("hidden");
-      document.getElementById("orderPollingHint")?.classList.add("hidden");
-      const idEl = document.getElementById("orderIdText");
-      const msgEl = document.getElementById("orderInfoMessage");
-      if (idEl) idEl.textContent = "";
-      if (msgEl) msgEl.textContent = "";
     }
 
     function savePendingOrder(order, type) {
@@ -1154,7 +1172,7 @@
         const d = await r.json();
         if (!r.ok) return null;
         savePendingOrder(d, d.type);
-        showOrderInfo(d);
+        applyOrderState(d);
         if (d.status === "fulfilled" && d.code) {
           stopOrderPolling();
           toast("邀请码已填入，请点击开通");
@@ -1198,7 +1216,7 @@
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
         savePendingOrder(d, type);
-        showOrderInfo(d);
+        applyOrderState(d);
         updateOrderFlowUI(d, type);
         toast("请点「发送通知」");
       } catch (e) {
@@ -1226,7 +1244,7 @@
         const d = await r.json();
         if (!r.ok) throw new Error(d.error);
         savePendingOrder(d, type);
-        showOrderInfo(d);
+        applyOrderState(d);
         updateOrderFlowUI(d, type);
         startOrderPolling(pending.orderId);
         toast("通知已发送，请等待确认");
@@ -1435,6 +1453,35 @@
       contactModal.classList.add("show");
     };
     document.getElementById("contactModalClose").onclick = () => contactModal.classList.remove("show");
+    document.getElementById("contactSendBtn").onclick = async () => {
+      const message = document.getElementById("contactMessageInput")?.value.trim();
+      const contact = document.getElementById("contactReplyInput")?.value.trim();
+      if (!message) {
+        alert("请填写留言内容");
+        return;
+      }
+      const btn = document.getElementById("contactSendBtn");
+      btn.disabled = true;
+      const oldText = btn.textContent;
+      btn.textContent = "发送中...";
+      try {
+        const r = await fetch(`${API}/api/contact`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, message, contact }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error);
+        document.getElementById("contactMessageInput").value = "";
+        document.getElementById("contactReplyInput").value = "";
+        toast(d.message || "留言已发送");
+      } catch (e) {
+        alert(e.message || "发送失败");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = oldText;
+      }
+    };
     contactModal.onclick = (e) => {
       if (e.target === contactModal) contactModal.classList.remove("show");
     };
