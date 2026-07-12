@@ -555,6 +555,61 @@ function applyUpgradeToDevice(deviceId, targetPlanId, store, meta = {}) {
   };
 }
 
+export function applyOrderUpgrade(deviceId, targetPlanId, orderId, env = process.env) {
+  const normalizedTargetId = String(targetPlanId || "").trim();
+  const targetPlan = getPlanById(normalizedTargetId);
+  if (!targetPlan) {
+    const error = new Error("请选择有效的升级套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  const store = loadStore();
+  const proRecord = getActiveProRecord(deviceId, store);
+  if (!proRecord) {
+    const error = new Error("当前不是会员，请先开通会员");
+    error.status = 403;
+    throw error;
+  }
+
+  const currentPlanId = proRecord.plan || "year";
+  const currentTier = getPlanTier(currentPlanId);
+  const targetTier = getPlanTier(normalizedTargetId);
+  if (targetTier <= currentTier) {
+    const error = new Error("您已是该档位或更高档位会员，无需重复升级");
+    error.status = 400;
+    throw error;
+  }
+
+  const diffPrice = calculateUpgradePrice(currentPlanId, normalizedTargetId);
+  if (diffPrice == null) {
+    const error = new Error("只能升级到更高档位套餐");
+    error.status = 400;
+    throw error;
+  }
+
+  const result = applyUpgradeToDevice(deviceId, normalizedTargetId, store, {
+    upgradeCode: null,
+    source: "order-upgrade",
+    orderId: String(orderId || "").trim(),
+  });
+
+  if (store.pendingUpgradeClaims?.[deviceId]) {
+    delete store.pendingUpgradeClaims[deviceId];
+  }
+
+  saveStore(store);
+
+  return {
+    ...getUsageStatus(deviceId, env),
+    currentPlan: result.currentPlan,
+    targetPlan: result.targetPlan,
+    diffPrice: result.diffPrice,
+    expiresAt: result.expiresAt,
+    message: `已从${result.currentPlan?.name || "原套餐"}升级为${result.targetPlan.name}（补差价 ${formatMoney(result.diffPrice)}），有效期至 ${formatDate(result.expiresAt)}`,
+  };
+}
+
 export function claimUpgradeCode(deviceId, targetPlanId, env = process.env, options = {}) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");

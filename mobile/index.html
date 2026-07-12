@@ -724,7 +724,7 @@
         </div>
         <div class="field">
           <label for="competitorReference">竞品参考（选填）</label>
-          <textarea id="competitorReference" rows="3" placeholder="粘贴 Amazon 竞品标题/五点"></textarea>
+          <textarea id="competitorReference" rows="3" placeholder="粘贴 Amazon 竞品标题"></textarea>
           <span class="field-hint">学习竞品写法，不会抄袭；留空也能生成</span>
         </div>
         <div class="field">
@@ -798,8 +798,6 @@
       <div class="contact-modal-body">
         <div class="contact-wechat-block">
           <img id="contactModalWechatQr" src="/assets/payment/wechat-service.png" alt="客服微信二维码" />
-          <span class="contact-label">扫码添加微信</span>
-          <span class="contact-hint" id="contactModalWechatHint"></span>
         </div>
         <div class="contact-email-block">
           <span class="contact-label">电子邮箱</span>
@@ -973,7 +971,7 @@
       if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
       if (noteEl) {
         noteEl.textContent = isUpgrade
-          ? "选升级套餐 → 扫码付补差价 → 我已付款 → 发送通知 → 等待邀请码 → 升级"
+          ? "选升级套餐 → 扫码付补差价 → 我已付款 → 发送通知 → 等待确认 → 自动升级"
           : purchaseInfo?.trialNote || "选套餐 → 扫码付款 → 我已付款 → 发送通知 → 等待邀请码 → 开通";
       }
       if (bannerEl) {
@@ -1018,13 +1016,20 @@
 
     function applyOrderState(order) {
       if (!order) return;
+      if (order.type === "upgrade" && order.upgradeApplied) {
+        showOrderCodeInBox("", false);
+        updateOrderFlowUI(order, order.type);
+        if (els.inviteCodeInput) els.inviteCodeInput.placeholder = "升级已完成";
+        return;
+      }
       showOrderCodeInBox(order.code, order.status === "fulfilled");
       updateOrderFlowUI(order, order.type);
       if (!els.inviteCodeInput) return;
       if (order.status === "fulfilled") {
-        els.inviteCodeInput.placeholder = "邀请码已填入";
+        els.inviteCodeInput.placeholder = order.type === "upgrade" ? "请点击升级" : "邀请码已填入";
       } else if (order.status === "pending" && order.adminNotified) {
-        els.inviteCodeInput.placeholder = "等待管理员确认，邀请码将自动填入…";
+        els.inviteCodeInput.placeholder =
+          order.type === "upgrade" ? "等待管理员确认，确认后自动升级…" : "等待管理员确认，邀请码将自动填入…";
       } else if (order.status === "pending") {
         els.inviteCodeInput.placeholder = "请先点「发送通知」";
       } else {
@@ -1079,7 +1084,14 @@
         if (!r.ok) return null;
         savePendingOrder(d, d.type);
         applyOrderState(d);
-        if (d.status === "fulfilled" && d.code) {
+        if (d.status === "fulfilled" && d.type === "upgrade" && d.upgradeApplied) {
+          stopOrderPolling();
+          clearPendingOrder();
+          els.activateModal.classList.remove("show");
+          modalMode = "purchase";
+          await refreshUsage();
+          toast(d.message || "套餐已升级成功");
+        } else if (d.status === "fulfilled" && d.code) {
           stopOrderPolling();
           toast(d.type === "upgrade" ? "升级邀请码已填入，请点击升级" : "邀请码已填入，请点击开通");
         } else if (d.status === "cancelled") {
@@ -1288,31 +1300,8 @@
       const warnEl = document.getElementById("inventoryWarn");
       if (!warnEl) return;
       if (modalMode === "upgrade") {
-        const inv = purchaseInfo?.upgradeInventory;
-        if (!inv?.configured) {
-          warnEl.textContent =
-            "服务器尚未配置升级邀请码（.env 中 UPGRADE_CODES_HALF / UPGRADE_CODES_YEAR），请联系管理员。";
-          warnEl.classList.remove("hidden");
-          return;
-        }
-        const planInv = inv.plans?.[selectedPlanId];
-        if (planInv && planInv.ready && planInv.available <= 0) {
-          warnEl.textContent =
-            selectedPlanId === "year"
-              ? "年卡升级邀请码已发完，请联系管理员补充 UPGRADE_CODES_YEAR。"
-              : "该升级套餐邀请码已发完，请稍后再试。";
-          warnEl.classList.remove("hidden");
-          return;
-        }
-        if (planInv && !planInv.ready) {
-          warnEl.textContent =
-            selectedPlanId === "year"
-              ? "未配置年卡升级邀请码（UPGRADE_CODES_YEAR），请联系管理员。"
-              : "该升级套餐未配置邀请码，请选择其他套餐。";
-          warnEl.classList.remove("hidden");
-          return;
-        }
-        warnEl.classList.add("hidden");
+        warnEl.textContent = "付款后点击「发送通知」，管理员确认收款后自动完成升级。";
+        warnEl.classList.remove("hidden");
         return;
       }
       const inv = purchaseInfo?.activationInventory;
@@ -1407,10 +1396,8 @@
     function renderContactModal() {
       const svc = purchaseInfo?.contactService;
       const qrEl = document.getElementById("contactModalWechatQr");
-      const hintEl = document.getElementById("contactModalWechatHint");
       const emailEl = document.getElementById("contactModalEmail");
       if (qrEl) qrEl.src = svc?.wechatQr || "/assets/payment/wechat-service.png";
-      if (hintEl) hintEl.textContent = svc?.hint || svc?.wechatId || "";
       const email = svc?.email || "108729447@qq.com";
       if (emailEl) {
         emailEl.textContent = email;

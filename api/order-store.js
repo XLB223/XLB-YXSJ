@@ -10,7 +10,7 @@ import {
 import {
   getUsageStatus,
   claimPurchaseCode,
-  claimUpgradeCode,
+  applyOrderUpgrade,
 } from "./usage-store.js";
 import {
   sendOrderCodeEmail,
@@ -68,6 +68,7 @@ function formatOrderResponse(order) {
     createdAt: order.createdAt,
     fulfilledAt: order.fulfilledAt || null,
     adminNotified: Boolean(order.adminNotified),
+    upgradeApplied: Boolean(order.upgradeApplied),
     code: order.status === "fulfilled" ? order.code : null,
     message: orderStatusMessage(order),
   };
@@ -75,9 +76,12 @@ function formatOrderResponse(order) {
 
 function orderStatusMessage(order) {
   if (order.status === "fulfilled") {
-    return order.type === "upgrade"
-      ? "已确认收款，升级邀请码已填入下方，请点击开通。"
-      : "已确认收款，邀请码已填入下方，请点击开通。";
+    if (order.type === "upgrade") {
+      return order.upgradeApplied
+        ? "已确认收款，会员套餐已升级完成。"
+        : "已确认收款，升级邀请码已填入下方，请点击升级。";
+    }
+    return "已确认收款，邀请码已填入下方，请点击开通。";
   }
   if (order.status === "cancelled") {
     return "订单已取消，如有疑问请联系客服。";
@@ -319,10 +323,34 @@ export async function fulfillOrder(orderId, env = process.env) {
     throw error;
   }
   if (order.status === "fulfilled") {
+    if (order.type === "upgrade" && !order.upgradeApplied) {
+      try {
+        const upgradeResult = applyOrderUpgrade(order.deviceId, order.planId, order.orderId, env);
+        order.upgradeApplied = true;
+        order.code = order.orderId;
+        store.orders[normalizedId] = order;
+        saveOrdersStore(store);
+        return {
+          ...formatOrderResponse(order),
+          emailSent: false,
+          upgradeApplied: true,
+          message: upgradeResult.message || "会员套餐已升级完成",
+        };
+      } catch (error) {
+        return {
+          ...formatOrderResponse(order),
+          emailSent: false,
+          message: error.message || "订单已确认，但自动升级失败，请联系管理员",
+        };
+      }
+    }
     return {
       ...formatOrderResponse(order),
       emailSent: false,
-      message: "订单已发过邀请码，无需重复确认",
+      message:
+        order.type === "upgrade" && order.upgradeApplied
+          ? "订单已确认，会员已升级完成"
+          : "订单已发过邀请码，无需重复确认",
     };
   }
   if (order.status === "cancelled") {
@@ -332,11 +360,40 @@ export async function fulfillOrder(orderId, env = process.env) {
   }
 
   let claimResult;
+
   if (order.type === "upgrade") {
-    claimResult = claimUpgradeCode(order.deviceId, order.planId, env, { skipClaimLimit: true });
-  } else {
-    claimResult = claimPurchaseCode(order.deviceId, order.planId, env, { skipClaimLimit: true });
+    const upgradeResult = applyOrderUpgrade(order.deviceId, order.planId, order.orderId, env);
+    order.status = "fulfilled";
+    order.code = order.orderId;
+    order.upgradeApplied = true;
+    order.fulfilledAt = new Date().toISOString();
+    store.orders[normalizedId] = order;
+    saveOrdersStore(store);
+
+    const formatted = formatOrderResponse(order);
+    const adminNotify = await notifyAdminFulfillCode(
+      formatted,
+      `订单 ${order.orderId} 升级完成`,
+      env
+    );
+
+    const adminOk = adminNotify.email?.sent || adminNotify.wechat?.sent;
+    const parts = [upgradeResult.message || "会员套餐已升级完成"];
+    if (adminNotify.email?.sent) parts.push(`已发到你邮箱 ${adminNotifyEmail(env)}`);
+    if (adminNotify.wechat?.sent) parts.push(`已推送到微信（${adminNotify.wechat.channel}）`);
+    if (!adminOk) parts.push(`管理员通知失败：${adminNotify.email?.error || adminNotify.wechat?.error || "未配置"}`);
+
+    return {
+      ...formatted,
+      code: order.orderId,
+      upgradeApplied: true,
+      adminNotify,
+      userEmailSent: false,
+      message: parts.join("；"),
+    };
   }
+
+  claimResult = claimPurchaseCode(order.deviceId, order.planId, env, { skipClaimLimit: true });
 
   const code = claimResult.code;
   if (!code) {
