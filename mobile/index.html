@@ -935,8 +935,8 @@
       if (titleEl) titleEl.textContent = isUpgrade ? "升级会员套餐" : "开通会员";
       if (noteEl) {
         noteEl.textContent = isUpgrade
-          ? "选升级套餐 → 填邮箱 → 提交订单 → 付款备注订单号 → 查订单取码"
-          : purchaseInfo?.trialNote || "免费试用每天 3 次。开通：选套餐 → 填邮箱 → 提交订单。";
+          ? "选升级套餐 → 提交订单 → 付款备注订单号 → 等待邀请码出现"
+          : purchaseInfo?.trialNote || "免费试用每天 3 次。开通：选套餐 → 提交订单 → 付款备注订单号。";
       }
       if (bannerEl) {
         if (isUpgrade && currentUsage?.isPro) {
