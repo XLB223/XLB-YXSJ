@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import {
   FREE_DAILY_LIMIT,
@@ -24,6 +25,21 @@ function getUsageFile() {
 const USAGE_FILE = getUsageFile();
 const ORDERS_FILE = path.join(__dirname, "..", "data", "orders.json");
 
+function codeMatchesOrder(code, order) {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized || !order) return false;
+  const orderId = String(order.orderId || "").trim().toUpperCase();
+  const variants = new Set(
+    [
+      normalized,
+      orderId,
+      String(order.code || "").trim().toUpperCase(),
+      orderId ? `ORDER-${orderId}` : "",
+    ].filter(Boolean)
+  );
+  return variants.has(normalized);
+}
+
 function findFulfilledUpgradeOrder(deviceId, targetPlanId, code) {
   try {
     if (!fs.existsSync(ORDERS_FILE)) return null;
@@ -31,7 +47,6 @@ function findFulfilledUpgradeOrder(deviceId, targetPlanId, code) {
     const orders = raw.orders || {};
     const normalizedDeviceId = String(deviceId || "").trim();
     const normalizedTargetId = String(targetPlanId || "").trim();
-    const normalizedCode = String(code || "").trim();
     return (
       Object.values(orders).find(
         (order) =>
@@ -39,12 +54,37 @@ function findFulfilledUpgradeOrder(deviceId, targetPlanId, code) {
           order.type === "upgrade" &&
           order.planId === normalizedTargetId &&
           order.status === "fulfilled" &&
-          order.code === normalizedCode
+          codeMatchesOrder(code, order)
       ) || null
     );
   } catch {
     return null;
   }
+}
+
+function findFulfilledPurchaseOrder(deviceId, code) {
+  try {
+    if (!fs.existsSync(ORDERS_FILE)) return null;
+    const raw = JSON.parse(fs.readFileSync(ORDERS_FILE, "utf8"));
+    const orders = raw.orders || {};
+    const normalizedDeviceId = String(deviceId || "").trim();
+    return (
+      Object.values(orders).find(
+        (order) =>
+          order.deviceId === normalizedDeviceId &&
+          order.type === "purchase" &&
+          order.status === "fulfilled" &&
+          codeMatchesOrder(code, order)
+      ) || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function generateSyntheticCode(prefix, planId) {
+  const suffix = crypto.randomBytes(4).toString("hex").toUpperCase();
+  return `${prefix}-${String(planId || "").trim().toUpperCase()}-${suffix}`;
 }
 
 function todayKey() {
@@ -319,6 +359,25 @@ export function activateDevice(deviceId, code, env = process.env) {
   if (pending?.code === normalized) {
     planId = pending.planId;
   } else if (!planId) {
+    const fulfilledOrder = findFulfilledPurchaseOrder(deviceId, normalized);
+    if (fulfilledOrder) {
+      if (isProDevice(deviceId, env)) {
+        return {
+          ...getUsageStatus(deviceId, env),
+          message: "会员已开通，无需重复激活",
+        };
+      }
+      const result = applyOrderPurchase(
+        deviceId,
+        fulfilledOrder.planId,
+        fulfilledOrder.orderId,
+        env
+      );
+      return {
+        ...result,
+        message: `${result.planName}已开通，已绑定本电脑。有效期至 ${formatDate(result.expiresAt)}`,
+      };
+    }
     const error = new Error("邀请码无效，请检查后重试");
     error.status = 403;
     throw error;
@@ -397,26 +456,6 @@ export function getActivationInventory(env = process.env) {
   };
 }
 
-function recordClaimAttempt(deviceId, store) {
-  const today = todayKey();
-  const current = store.claimAttempts[deviceId];
-  if (!current || current.date !== today) {
-    store.claimAttempts[deviceId] = { date: today, count: 1 };
-  } else {
-    store.claimAttempts[deviceId] = { date: today, count: current.count + 1 };
-  }
-}
-
-function assertCanClaim(deviceId, store) {
-  const today = todayKey();
-  const record = store.claimAttempts[deviceId];
-  if (record?.date === today && record.count >= 5) {
-    const error = new Error("今日领取次数过多，请明天再试或联系客服");
-    error.status = 429;
-    throw error;
-  }
-}
-
 export function claimPurchaseCode(deviceId, planId, env = process.env, options = {}) {
   if (!deviceId?.trim()) {
     const error = new Error("缺少设备标识");
@@ -455,26 +494,13 @@ export function claimPurchaseCode(deviceId, planId, env = process.env, options =
   }
 
   const configuredCodes = getCodeListsForPlan(normalizedPlanId, env);
-  if (!configuredCodes.length) {
-    const error = new Error("服务器未配置该套餐邀请码，请联系管理员");
-    error.status = 503;
-    throw error;
-  }
-
-  if (!options.skipClaimLimit) {
-    assertCanClaim(deviceId, store);
-  }
-
   const used = getUsedCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
-  if (!available.length) {
-    const error = new Error("该套餐邀请码已发完，请换套餐或稍后再试");
-    error.status = 503;
-    throw error;
-  }
+  const code =
+    available[0] ||
+    generateSyntheticCode("GEN", normalizedPlanId);
 
-  const code = available[0];
-  if (!store.usedActivationCodes.includes(code)) {
+  if (configuredCodes.includes(code) && !store.usedActivationCodes.includes(code)) {
     store.usedActivationCodes.push(code);
   }
   store.pendingClaims[deviceId] = {
@@ -482,9 +508,6 @@ export function claimPurchaseCode(deviceId, planId, env = process.env, options =
     planId: normalizedPlanId,
     claimedAt: new Date().toISOString(),
   };
-  if (!options.skipClaimLimit) {
-    recordClaimAttempt(deviceId, store);
-  }
   saveStore(store);
 
   return {
@@ -722,41 +745,17 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env, opti
   }
 
   const configuredCodes = getUpgradeCodeList(normalizedTargetId, env);
-  if (!configuredCodes.length) {
-    const error = new Error(
-      normalizedTargetId === "year"
-        ? "服务器未配置年卡升级邀请码（UPGRADE_CODES_YEAR），请联系管理员"
-        : "服务器未配置升级邀请码，请联系管理员"
-    );
-    error.status = 503;
-    throw error;
-  }
-
-  if (!options.skipClaimLimit) {
-    assertCanClaim(deviceId, store);
-  }
-
   const used = getUsedUpgradeCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
-  if (!available.length) {
-    const error = new Error(
-      normalizedTargetId === "year"
-        ? "年卡升级邀请码已发完，请联系管理员补充 UPGRADE_CODES_YEAR"
-        : "该套餐升级邀请码已发完，请稍后再试"
-    );
-    error.status = 503;
-    throw error;
-  }
+  const code =
+    available[0] ||
+    generateSyntheticCode("UPG", normalizedTargetId);
 
-  const code = available[0];
   store.pendingUpgradeClaims[deviceId] = {
     code,
     targetPlanId: normalizedTargetId,
     claimedAt: new Date().toISOString(),
   };
-  if (!options.skipClaimLimit) {
-    recordClaimAttempt(deviceId, store);
-  }
   saveStore(store);
 
   return {
@@ -785,7 +784,39 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
     throw error;
   }
 
-  const codeTargetPlanId = resolveUpgradeCodeTarget(normalizedCode, env);
+  const store = loadStore();
+  const fulfilledOrder = findFulfilledUpgradeOrder(deviceId, normalizedTargetId, normalizedCode);
+  const proRecord = getActiveProRecord(deviceId, store);
+  if (!proRecord) {
+    const error = new Error("当前不是会员，请先开通会员");
+    error.status = 403;
+    throw error;
+  }
+
+  if (fulfilledOrder) {
+    const currentTier = getPlanTier(proRecord.plan || "year");
+    const targetTier = getPlanTier(normalizedTargetId);
+    if (targetTier <= currentTier) {
+      return {
+        ...getUsageStatus(deviceId, env),
+        upgraded: true,
+        message: "套餐已升级完成",
+      };
+    }
+    const result = applyOrderUpgrade(deviceId, normalizedTargetId, fulfilledOrder.orderId, env);
+    return {
+      ...result,
+      upgraded: true,
+    };
+  }
+
+  let codeTargetPlanId = resolveUpgradeCodeTarget(normalizedCode, env);
+  if (!codeTargetPlanId) {
+    const pendingByCode = getPendingUpgradeClaimByCode(store, normalizedCode);
+    if (pendingByCode?.targetPlanId) {
+      codeTargetPlanId = pendingByCode.targetPlanId;
+    }
+  }
   if (!codeTargetPlanId) {
     const error = new Error("升级邀请码无效，请检查后重试");
     error.status = 403;
@@ -796,14 +827,6 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
       `该邀请码仅可用于升级为${getPlanById(codeTargetPlanId)?.name || "对应套餐"}，请重新选择套餐`
     );
     error.status = 400;
-    throw error;
-  }
-
-  const store = loadStore();
-  const proRecord = getActiveProRecord(deviceId, store);
-  if (!proRecord) {
-    const error = new Error("当前不是会员，请先开通会员");
-    error.status = 403;
     throw error;
   }
 
@@ -819,8 +842,7 @@ export function upgradePlan(deviceId, targetPlanId, upgradeCode, env = process.e
     pending &&
     pending.code === normalizedCode &&
     pending.targetPlanId === normalizedTargetId;
-  const fulfilledOrder = findFulfilledUpgradeOrder(deviceId, normalizedTargetId, normalizedCode);
-  if (!pendingOk && !fulfilledOrder) {
+  if (!pendingOk) {
     const error = new Error("请等待管理员确认收款，邀请码将自动填入后再点击升级");
     error.status = 403;
     throw error;
@@ -973,7 +995,7 @@ export function assertCanGenerate(deviceId, env = process.env) {
   const status = getUsageStatus(deviceId, env);
   if (status.remaining <= 0) {
     const error = new Error(
-      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，付款后获取邀请码并填入开通。`
+      `免费试用每天限 ${FREE_DAILY_LIMIT} 次，今日已用完。开通会员：${formatPriceSummary()}，扫码付款后发送通知即可。`
     );
     error.status = 402;
     error.code = "DAILY_LIMIT_REACHED";

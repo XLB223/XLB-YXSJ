@@ -80,11 +80,11 @@ function orderStatusMessage(order) {
     if (order.type === "upgrade") {
       return order.upgradeApplied
         ? "已确认收款，会员套餐已升级完成。"
-        : "已确认收款，升级邀请码已填入下方，请点击升级。";
+        : "已确认收款，请点击升级完成套餐变更。";
     }
     return order.activationApplied
       ? "已确认收款，会员已开通完成。"
-      : "已确认收款，邀请码已填入下方，请点击开通。";
+      : "已确认收款，请点击开通完成会员激活。";
   }
   if (order.status === "cancelled") {
     return "订单已取消，如有疑问请联系客服。";
