@@ -1,13 +1,18 @@
-请将图片放到本目录：
+请将图片放到本目录（文件名金额前缀 = 应付金额）：
 
-  wechat-service.png  ← 客服微信二维码（页面左侧「联系客服」弹窗）
-  wechat-pay.png      ← 微信收款码（开通会员弹窗）
-  alipay-pay.png      ← 支付宝收款码（开通会员弹窗）
+  wechat-service.png     ← 客服微信二维码（左侧「联系客服」）
 
-在 .env 中配置（可选）：
+  开通会员（固定金额收款码）：
+  29.9wechat-pay.png     ← 月卡 ¥29.9 微信
+  29.9alipay-pay.png     ← 月卡 ¥29.9 支付宝
+  69.9wechat-pay.png     ← 半年卡 ¥69.9 微信
+  69.9alipay-pay.png     ← 半年卡 ¥69.9 支付宝
+  129.9wechat-pay.png    ← 年卡 ¥129.9 微信
+  129.9alipay-pay.png    ← 年卡 ¥129.9 支付宝
 
-  CONTACT_WECHAT_QR=/assets/payment/wechat-service.png
-  CONTACT_WECHAT_ID=你的微信号
-  CONTACT_EMAIL=108729447@qq.com
+  升级补差价（如需升级功能，请再补）：
+  40wechat-pay.png / 40alipay-pay.png     ← 月卡→半年 补差 ¥40
+  60wechat-pay.png / 60alipay-pay.png     ← 半年→年卡 补差 ¥60
+  100wechat-pay.png / 100alipay-pay.png   ← 月卡→年卡 补差 ¥100
 
-重启服务后生效。
+页面会按所选套餐自动切换对应金额二维码。

@@ -97,9 +97,10 @@ export function getPurchaseInfo(env = process.env) {
       hint: wechatId ? `微信号：${wechatId}` : "扫码添加客服微信",
     },
     payment: {
-      wechatQr: (env.PAYMENT_WECHAT_QR || "/assets/payment/wechat-pay.png").trim(),
-      alipayQr: (env.PAYMENT_ALIPAY_QR || "/assets/payment/alipay-pay.png").trim(),
-      note: "先选择套餐并扫码支付，再点击「我已付款」→「发送通知」，管理员确认后自动开通",
+      // 前端按金额自动切换：29.9 / 69.9 / 129.9 + wechat|alipay-pay.png
+      wechatQr: (env.PAYMENT_WECHAT_QR || "/assets/payment/69.9wechat-pay.png").trim(),
+      alipayQr: (env.PAYMENT_ALIPAY_QR || "/assets/payment/69.9alipay-pay.png").trim(),
+      note: "先选择套餐，扫对应金额固定收款码支付，再点「我已付款」→「发送通知」",
     },
     freeDailyLimit: FREE_DAILY_LIMIT,
     trialNote: "免费试用每天 3 次，试用结束后可扫码开通会员",

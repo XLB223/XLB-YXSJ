@@ -893,11 +893,11 @@
       <div class="payment-section" id="paymentSection">
         <div class="payment-qr-row">
           <div class="payment-qr-item">
-            <img id="wechatPayQr" src="/assets/payment/wechat-pay.png" alt="微信收款码" />
+            <img id="wechatPayQr" src="/assets/payment/69.9wechat-pay.png" alt="微信收款码" />
             <span>微信支付</span>
           </div>
           <div class="payment-qr-item">
-            <img id="alipayPayQr" src="/assets/payment/alipay-pay.png" alt="支付宝收款码" />
+            <img id="alipayPayQr" src="/assets/payment/69.9alipay-pay.png" alt="支付宝收款码" />
             <span>支付宝</span>
           </div>
         </div>
@@ -1429,14 +1429,51 @@
       warnEl.classList.remove("hidden");
     }
 
+    function amountFileKey(amount) {
+      const n = Number(amount);
+      if (!Number.isFinite(n)) return "";
+      const rounded = Math.round(n * 10) / 10;
+      return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    }
+
+    function getSelectedPayAmount(plans = getModalPlans()) {
+      const plan = (plans || []).find((p) => p.id === selectedPlanId);
+      if (!plan) return null;
+      if (modalMode === "upgrade") {
+        return plan.diffPrice != null ? Number(plan.diffPrice) : null;
+      }
+      return plan.price != null ? Number(plan.price) : null;
+    }
+
+    function paymentQrPath(amount, channel) {
+      const key = amountFileKey(amount);
+      if (!key) return "";
+      // 文件名规则：金额前缀 + 渠道，如 29.9wechat-pay.png / 69.9alipay-pay.png
+      return `/assets/payment/${key}${channel}-pay.png`;
+    }
+
+    function updatePaymentQrs(plans = getModalPlans()) {
+      const amount = getSelectedPayAmount(plans);
+      const wechatQrEl = document.getElementById("wechatPayQr");
+      const alipayQrEl = document.getElementById("alipayPayQr");
+      if (!amount || !wechatQrEl || !alipayQrEl) return;
+      const wechatSrc = paymentQrPath(amount, "wechat");
+      const alipaySrc = paymentQrPath(amount, "alipay");
+      wechatQrEl.src = wechatSrc;
+      alipayQrEl.src = alipaySrc;
+      wechatQrEl.alt = `微信收款码 ¥${amountFileKey(amount)}`;
+      alipayQrEl.alt = `支付宝收款码 ¥${amountFileKey(amount)}`;
+    }
+
     function updatePaymentNote(plans = getModalPlans()) {
       const paymentNoteEl = document.getElementById("paymentNote");
       const plan = (plans || []).find((p) => p.id === selectedPlanId);
+      const amount = getSelectedPayAmount(plans);
       if (!paymentNoteEl) return;
-      if (modalMode === "upgrade" && plan) {
-        paymentNoteEl.textContent = `请扫码支付补差价 ${plan.diffLabel || plan.priceLabel}（升级为${plan.name}）`;
-      } else if (plan) {
-        paymentNoteEl.textContent = `请扫码支付 ${plan.priceLabel}（${plan.name}）`;
+      if (modalMode === "upgrade" && plan && amount != null) {
+        paymentNoteEl.textContent = `请扫「¥${amountFileKey(amount)}」固定金额收款码支付补差价（升级为${plan.name}）。金额不对将无法对账确认。`;
+      } else if (plan && amount != null) {
+        paymentNoteEl.textContent = `请扫「¥${amountFileKey(amount)}」固定金额收款码支付（${plan.name}）。请勿改金额，否则无法对账确认。`;
       } else if (purchaseInfo?.payment?.note) {
         paymentNoteEl.textContent = purchaseInfo.payment.note;
       }
@@ -1459,8 +1496,6 @@
       const grid = document.getElementById("pricingGrid");
       const noteEl = document.getElementById("pricingTrialNote");
       const paymentSiteEl = document.getElementById("paymentSite");
-      const wechatQrEl = document.getElementById("wechatPayQr");
-      const alipayQrEl = document.getElementById("alipayPayQr");
       const plans = getModalPlans();
       if (!plans.length) {
         grid.innerHTML = `<p style="font-size:.78rem;color:var(--muted);text-align:center;padding:8px 0">暂无可升级套餐</p>`;
@@ -1504,8 +1539,7 @@
       });
       if (modalMode !== "upgrade" && purchaseInfo?.trialNote) noteEl.textContent = purchaseInfo.trialNote;
       if (purchaseInfo?.siteUrl) paymentSiteEl.textContent = purchaseInfo.siteUrl;
-      wechatQrEl.src = purchaseInfo?.payment?.wechatQr || "/assets/payment/wechat-pay.png";
-      alipayQrEl.src = purchaseInfo?.payment?.alipayQr || "/assets/payment/alipay-pay.png";
+      updatePaymentQrs(plans);
       updatePaymentNote(plans);
       updateInventoryWarn();
       updateModalModeUI();
