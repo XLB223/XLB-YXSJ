@@ -260,7 +260,11 @@ async function handleRequest(req, res) {
   }
 
   if (url === "/api/health") {
-    sendJson(req, res, 200, { ok: true });
+    // 仅返回布尔状态，不泄露路径/配置细节
+    sendJson(req, res, 200, {
+      ok: true,
+      hasApiKey: Boolean(env.DEEPSEEK_API_KEY),
+    });
     return;
   }
 

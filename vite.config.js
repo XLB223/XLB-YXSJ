@@ -24,7 +24,12 @@ export default defineConfig(({ mode }) => {
             if (url === "/api/health") {
               res.statusCode = 200;
               res.setHeader("Content-Type", "application/json; charset=utf-8");
-              res.end(JSON.stringify({ ok: true }));
+              res.end(
+                JSON.stringify({
+                  ok: true,
+                  hasApiKey: Boolean(env.DEEPSEEK_API_KEY),
+                })
+              );
               return;
             }
 
