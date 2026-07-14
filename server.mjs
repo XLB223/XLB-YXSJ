@@ -470,12 +470,17 @@ async function handleRequest(req, res) {
         },
         env
       );
+      const softFail =
+        result &&
+        result.status === "fulfilled" &&
+        ((result.type === "purchase" && !result.activationApplied) ||
+          (result.type === "upgrade" && !result.upgradeApplied));
       sendHtml(
         res,
-        200,
+        softFail ? 500 : 200,
         renderFulfillPage({
-          ok: true,
-          title: "已确认收款",
+          ok: !softFail,
+          title: softFail ? "已确认但开通未完成" : "已确认收款",
           message: result.message || "会员已处理完成。",
           orderId: result.orderId,
           code: result.code,

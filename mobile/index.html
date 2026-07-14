@@ -1013,11 +1013,14 @@
       if (notify) {
         notify.classList.remove("hidden");
         if (order.status === "fulfilled") {
-          notify.disabled = true; notify.textContent = "已确认";
-        } else if (order.adminNotified) {
-          notify.disabled = true; notify.textContent = "通知已发送";
+          notify.disabled = true;
+          notify.textContent = "已确认";
+        } else if (order.canResendNotify || !order.adminNotified) {
+          notify.disabled = false;
+          notify.textContent = order.adminNotified ? "② 重新发送通知" : "② 发送通知";
         } else {
-          notify.disabled = false; notify.textContent = "② 发送通知";
+          notify.disabled = true;
+          notify.textContent = "通知已发送";
         }
       }
     }
@@ -1373,7 +1376,7 @@
             pending.planId &&
             pending.planId !== nextPlanId
           ) {
-            if (!confirm("切换套餐将取消当前待处理订单记录，是否继续？")) return;
+            if (!confirm("切换套餐将取消当前待处理订单（服务端旧订单也会作废），是否继续？")) return;
             stopOrderPolling();
             clearPendingOrder();
             resetActivateModalView();
@@ -1529,7 +1532,7 @@
         alert(e.message || (modalMode === "upgrade" ? "升级失败" : "开通失败"));
       } finally {
         btn.disabled = false;
-        btn.textContent = modalMode === "upgrade" ? "输入邀请码并升级" : "输入邀请码并开通";
+        btn.textContent = modalMode === "upgrade" ? "升级" : "开通";
       }
     };
     els.activateModal.onclick = (e) => {

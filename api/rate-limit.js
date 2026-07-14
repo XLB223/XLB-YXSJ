@@ -37,9 +37,14 @@ export function checkRateLimit(key, { limit, windowMs, message } = {}) {
 }
 
 export function clientKey(req, suffix = "") {
-  const forwarded = String(req.headers?.["x-forwarded-for"] || "")
-    .split(",")[0]
-    .trim();
-  const ip = forwarded || req.socket?.remoteAddress || "unknown";
+  // Prefer nginx X-Real-IP; do not trust client-controlled first XFF hop.
+  const realIp = String(req.headers?.["x-real-ip"] || "").trim();
+  const forwarded = String(req.headers?.["x-forwarded-for"] || "");
+  const forwardedParts = forwarded
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const proxyIp = forwardedParts.length ? forwardedParts[forwardedParts.length - 1] : "";
+  const ip = realIp || proxyIp || req.socket?.remoteAddress || "unknown";
   return `${ip}:${suffix}`;
 }

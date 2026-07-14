@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import {
   getPlanById,
+  getPlanTier,
   calculateUpgradePrice,
   formatMoney,
 } from "./pricing-plans.js";
@@ -60,6 +61,14 @@ function generateOrderId() {
   return `KJ-${date}-${suffix}`;
 }
 
+function canResendNotify(order) {
+  if (!order || order.status !== "pending") return false;
+  if (!order.adminNotified) return true;
+  if (!order.notifiedAt) return true;
+  const age = Date.now() - new Date(order.notifiedAt).getTime();
+  return !Number.isFinite(age) || age >= 30 * 60 * 1000;
+}
+
 function formatOrderResponse(order) {
   const plan = getPlanById(order.planId);
   return {
@@ -71,8 +80,10 @@ function formatOrderResponse(order) {
     amountLabel: order.amountLabel,
     paymentNote: order.orderId,
     createdAt: order.createdAt,
+    notifiedAt: order.notifiedAt || null,
     fulfilledAt: order.fulfilledAt || null,
     adminNotified: Boolean(order.adminNotified),
+    canResendNotify: canResendNotify(order),
     upgradeApplied: Boolean(order.upgradeApplied),
     activationApplied: Boolean(order.activationApplied),
     code: order.status === "fulfilled" ? order.code : null,
@@ -123,8 +134,14 @@ export function verifyFulfillAuthorization(orderId, query, env = process.env) {
     return Boolean(expected) && safeEqual(expected, sig);
   }
 
-  // Backward-compatible global token (discourage for new emails).
-  return verifyAdminFulfillToken(query?.token, env);
+  // 仅显式开启时允许 HTTP 全局 token（默认关闭，防止旧链接无限期开通任意订单）
+  const allowLegacy = String(env.ALLOW_LEGACY_FULFILL_TOKEN || "")
+    .trim()
+    .toLowerCase();
+  if (allowLegacy === "true" || allowLegacy === "1" || allowLegacy === "on") {
+    return verifyAdminFulfillToken(query?.token, env);
+  }
+  return false;
 }
 
 export function buildAdminFulfillUrl(orderId, env = process.env) {
@@ -151,6 +168,11 @@ export function createOrder({ deviceId, planId, type }, env = process.env) {
   }
 
   const normalizedType = String(type || "purchase").trim();
+  if (normalizedType !== "purchase" && normalizedType !== "upgrade") {
+    const error = new Error("订单类型无效");
+    error.status = 400;
+    throw error;
+  }
   const normalizedPlanId = String(planId || "").trim();
   const plan = getPlanById(normalizedPlanId);
   if (!plan) {
@@ -192,6 +214,21 @@ export function createOrder({ deviceId, planId, type }, env = process.env) {
       ...formatOrderResponse(pendingSame),
       paymentInstructions: `您的订单号：${pendingSame.orderId}`,
     };
+  }
+
+  // 同设备同类型其它 pending 自动取消，避免僵尸订单导致对账混乱
+  for (const existing of Object.values(store.orders)) {
+    if (
+      existing.deviceId === deviceId &&
+      existing.status === "pending" &&
+      existing.type === normalizedType &&
+      existing.planId !== normalizedPlanId
+    ) {
+      existing.status = "cancelled";
+      existing.cancelledAt = new Date().toISOString();
+      existing.cancelReason = "replaced-by-new-plan";
+      store.orders[existing.orderId] = existing;
+    }
   }
 
   let amountLabel = plan.priceLabel;
@@ -301,14 +338,34 @@ export async function notifyOrderToAdmin(orderId, deviceId, env = process.env) {
     throw error;
   }
 
-  order.adminNotified = true;
-  order.notifiedAt = new Date().toISOString();
-  store.orders[normalizedId] = order;
-  saveOrdersStore(store);
+  // await 后再读库，避免把已履约订单覆盖回 pending
+  const freshStore = loadOrdersStore();
+  const fresh = freshStore.orders[normalizedId];
+  if (!fresh) {
+    const error = new Error("订单状态异常，请刷新后重试");
+    error.status = 500;
+    throw error;
+  }
+  if (fresh.status === "fulfilled") {
+    return {
+      ...formatOrderResponse(fresh),
+      message: `订单已确认完成。订单号：${fresh.orderId}`,
+    };
+  }
+  if (fresh.status === "cancelled") {
+    const error = new Error("订单已取消");
+    error.status = 400;
+    throw error;
+  }
+
+  fresh.adminNotified = true;
+  fresh.notifiedAt = new Date().toISOString();
+  freshStore.orders[normalizedId] = fresh;
+  saveOrdersStore(freshStore);
 
   return {
-    ...formatOrderResponse(order),
-    message: `通知已发送到管理员，请等待确认。订单号：${order.orderId}`,
+    ...formatOrderResponse(fresh),
+    message: `通知已发送到管理员，请等待确认。订单号：${fresh.orderId}`,
   };
 }
 
@@ -477,7 +534,24 @@ export async function fulfillOrder(orderId, env = process.env) {
   }
 
   if (order.type === "upgrade") {
-    const upgradeResult = applyOrderUpgrade(order.deviceId, order.planId, order.orderId, env);
+    let upgradeResult;
+    try {
+      upgradeResult = applyOrderUpgrade(order.deviceId, order.planId, order.orderId, env);
+    } catch (error) {
+      const usage = getUsageStatus(order.deviceId, env);
+      const alreadyUpgraded =
+        usage.isPro &&
+        (getPlanTier(usage.plan) >= getPlanTier(order.planId) ||
+          String(error.message || "").includes("无需重复升级"));
+      if (!alreadyUpgraded) {
+        error.status = error.status || 500;
+        throw error;
+      }
+      upgradeResult = {
+        message: error.message || "套餐已升级完成",
+      };
+    }
+
     order.status = "fulfilled";
     order.code = order.orderId;
     order.upgradeApplied = true;
@@ -486,11 +560,7 @@ export async function fulfillOrder(orderId, env = process.env) {
     saveOrdersStore(store);
 
     const formatted = formatOrderResponse(order);
-    const adminNotify = await notifyAdminFulfillCode(
-      formatted,
-      `订单 ${order.orderId} 升级完成`,
-      env
-    );
+    const adminNotify = await notifyAdminFulfillCode(formatted, order.orderId, env);
 
     const adminOk = adminNotify.email?.sent || adminNotify.wechat?.sent;
     const parts = [upgradeResult.message || "会员套餐已升级完成"];
@@ -502,13 +572,33 @@ export async function fulfillOrder(orderId, env = process.env) {
       ...formatted,
       code: order.orderId,
       upgradeApplied: true,
+      softOk: true,
       adminNotify,
       userEmailSent: false,
       message: parts.join("；"),
     };
   }
 
-  const activationResult = applyOrderPurchase(order.deviceId, order.planId, order.orderId, env);
+  let activationResult;
+  try {
+    if (isProDevice(order.deviceId, env)) {
+      activationResult = {
+        message: "订单已确认，会员已开通完成",
+      };
+    } else {
+      activationResult = applyOrderPurchase(order.deviceId, order.planId, order.orderId, env);
+    }
+  } catch (error) {
+    if (isProDevice(order.deviceId, env) || String(error.message || "").includes("已是会员")) {
+      activationResult = {
+        message: "订单已确认，会员已开通完成",
+      };
+    } else {
+      error.status = error.status || 500;
+      throw error;
+    }
+  }
+
   order.status = "fulfilled";
   order.code = order.orderId;
   order.activationApplied = true;
@@ -517,11 +607,7 @@ export async function fulfillOrder(orderId, env = process.env) {
   saveOrdersStore(store);
 
   const formatted = formatOrderResponse(order);
-  const adminNotify = await notifyAdminFulfillCode(
-    formatted,
-    `订单 ${order.orderId} 开通完成`,
-    env
-  );
+  const adminNotify = await notifyAdminFulfillCode(formatted, order.orderId, env);
 
   const adminOk = adminNotify.email?.sent || adminNotify.wechat?.sent;
   const parts = [activationResult.message || "会员已开通完成"];
@@ -533,6 +619,7 @@ export async function fulfillOrder(orderId, env = process.env) {
     ...formatted,
     code: order.orderId,
     activationApplied: true,
+    softOk: true,
     adminNotify,
     userEmailSent: false,
     message: parts.join("；"),
