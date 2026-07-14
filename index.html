@@ -1257,29 +1257,9 @@
         resetActivateModalView();
         return;
       }
-      if (
-        modalMode === "upgrade" &&
-        order.planId &&
-        selectedPlanId &&
-        order.planId !== selectedPlanId &&
-        order.status !== "pending"
-      ) {
-        clearPendingOrder();
-        updateOrderFlowUI(null, expectedType);
-        resetActivateModalView();
-        return;
-      }
-      if (
-        modalMode === "upgrade" &&
-        pending.planId &&
-        selectedPlanId &&
-        pending.planId !== selectedPlanId &&
-        order.status === "pending"
-      ) {
-        clearPendingOrder();
-        updateOrderFlowUI(null, expectedType);
-        resetActivateModalView();
-        return;
+      if (order.planId) {
+        selectedPlanId = order.planId;
+        renderPricingCards();
       }
       applyOrderState(order);
       updateOrderFlowUI(order, order.type);
@@ -1503,7 +1483,22 @@
         .join("");
       grid.querySelectorAll(".pricing-card").forEach((btn) => {
         btn.onclick = () => {
-          selectedPlanId = btn.dataset.plan;
+          const nextPlanId = btn.dataset.plan;
+          const pending = loadPendingOrder();
+          const expectedType = modalMode === "upgrade" ? "upgrade" : "purchase";
+          if (
+            pending?.orderId &&
+            pending.type === expectedType &&
+            pending.planId &&
+            pending.planId !== nextPlanId
+          ) {
+            if (!confirm("切换套餐将取消当前待处理订单记录，是否继续？")) return;
+            stopOrderPolling();
+            clearPendingOrder();
+            resetActivateModalView();
+            updateOrderFlowUI(null, expectedType);
+          }
+          selectedPlanId = nextPlanId;
           renderPricingCards();
         };
       });

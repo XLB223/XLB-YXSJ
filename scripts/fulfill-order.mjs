@@ -12,9 +12,15 @@ if (!orderId) {
 
 const result = await fulfillOrder(orderId, process.env);
 console.log(result.message);
+console.log(`订单号: ${result.orderId || orderId}`);
 if (result.code) {
-  console.log(`邀请码: ${result.code}`);
-  console.log(`用户邮箱: ${result.email}`);
+  console.log(`关联码: ${result.code}`);
+}
+if (result.activationApplied) {
+  console.log("开通状态: 已自动开通");
+}
+if (result.upgradeApplied) {
+  console.log("升级状态: 已自动升级");
 }
 if (result.adminNotify?.email?.sent) {
   console.log("管理员邮箱通知已发送。");

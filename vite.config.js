@@ -24,15 +24,7 @@ export default defineConfig(({ mode }) => {
             if (url === "/api/health") {
               res.statusCode = 200;
               res.setHeader("Content-Type", "application/json; charset=utf-8");
-              res.end(
-                JSON.stringify({
-                  ok: true,
-                  hasApiKey: Boolean(env.DEEPSEEK_API_KEY),
-                  message: env.DEEPSEEK_API_KEY
-                    ? "服务器运行正常"
-                    : "未配置 DEEPSEEK_API_KEY",
-                })
-              );
+              res.end(JSON.stringify({ ok: true }));
               return;
             }
 
@@ -311,10 +303,10 @@ export default defineConfig(({ mode }) => {
               req.on("data", (chunk) => {
                 body += chunk;
               });
-              req.on("end", () => {
+              req.on("end", async () => {
                 try {
                   const payload = body ? JSON.parse(body) : {};
-                  const result = notifyOrderToAdmin(payload.orderId, payload.deviceId, env);
+                  const result = await notifyOrderToAdmin(payload.orderId, payload.deviceId, env);
                   res.statusCode = 200;
                   res.setHeader("Content-Type", "application/json; charset=utf-8");
                   res.end(JSON.stringify(result));
@@ -343,23 +335,33 @@ export default defineConfig(({ mode }) => {
             }
 
             if (url.startsWith("/api/order/fulfill")) {
+              const escapeHtml = (value) =>
+                String(value ?? "")
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+                  .replace(/"/g, "&quot;");
               try {
                 const query = new URL(req.url, "http://localhost").searchParams;
                 const result = await fulfillOrderIfAuthorized(
                   query.get("orderId"),
-                  query.get("token"),
+                  {
+                    token: query.get("token"),
+                    sig: query.get("sig"),
+                    exp: query.get("exp"),
+                  },
                   env
                 );
                 res.statusCode = 200;
                 res.setHeader("Content-Type", "text/html; charset=utf-8");
                 res.end(
-                  `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>已确认收款</title></head><body><h1>已确认收款</h1><p>${result.message || "邀请码已发放"}</p><p>订单号：${result.orderId || ""}</p><p>邀请码：${result.code || ""}</p></body></html>`
+                  `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>已确认收款</title></head><body><h1>已确认收款</h1><p>${escapeHtml(result.message || "会员已处理完成")}</p><p>订单号：${escapeHtml(result.orderId || "")}</p></body></html>`
                 );
               } catch (error) {
                 res.statusCode = error.status || 500;
                 res.setHeader("Content-Type", "text/html; charset=utf-8");
                 res.end(
-                  `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>确认失败</title></head><body><h1>确认失败</h1><p>${error.message || "无法确认此订单"}</p></body></html>`
+                  `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>确认失败</title></head><body><h1>确认失败</h1><p>${escapeHtml(error.message || "无法确认此订单")}</p></body></html>`
                 );
               }
               return;

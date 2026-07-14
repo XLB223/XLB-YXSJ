@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import os from "os";
-import crypto from "crypto";
 import { fileURLToPath } from "url";
 import {
   FREE_DAILY_LIMIT,
@@ -12,6 +11,7 @@ import {
   formatMoney,
   getPlanTier,
 } from "./pricing-plans.js";
+import { loadJsonStore, saveJsonStore } from "./safe-json-store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +24,15 @@ function getUsageFile() {
 
 const USAGE_FILE = getUsageFile();
 const ORDERS_FILE = path.join(__dirname, "..", "data", "orders.json");
+const EMPTY_USAGE_STORE = () => ({
+  devices: {},
+  proDevices: {},
+  usedActivationCodes: [],
+  usedUpgradeCodes: [],
+  pendingClaims: {},
+  pendingUpgradeClaims: {},
+  claimAttempts: {},
+});
 
 function codeMatchesOrder(code, order) {
   const normalized = String(code || "").trim().toUpperCase();
@@ -80,11 +89,6 @@ function findFulfilledPurchaseOrder(deviceId, code) {
   } catch {
     return null;
   }
-}
-
-function generateSyntheticCode(prefix, planId) {
-  const suffix = crypto.randomBytes(4).toString("hex").toUpperCase();
-  return `${prefix}-${String(planId || "").trim().toUpperCase()}-${suffix}`;
 }
 
 function todayKey() {
@@ -186,31 +190,20 @@ function getUsedCodesSet(store) {
 }
 
 function loadStore() {
-  try {
-    if (!fs.existsSync(USAGE_FILE)) {
-      return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], pendingClaims: {}, pendingUpgradeClaims: {}, claimAttempts: {} };
-    }
-    const raw = JSON.parse(fs.readFileSync(USAGE_FILE, "utf8"));
-    return {
-      devices: raw.devices || {},
-      proDevices: raw.proDevices || {},
-      usedActivationCodes: raw.usedActivationCodes || [],
-      usedUpgradeCodes: raw.usedUpgradeCodes || [],
-      pendingClaims: raw.pendingClaims || {},
-      pendingUpgradeClaims: raw.pendingUpgradeClaims || {},
-      claimAttempts: raw.claimAttempts || {},
-    };
-  } catch {
-    return { devices: {}, proDevices: {}, usedActivationCodes: [], usedUpgradeCodes: [], pendingClaims: {}, pendingUpgradeClaims: {}, claimAttempts: {} };
-  }
+  const raw = loadJsonStore(USAGE_FILE, EMPTY_USAGE_STORE);
+  return {
+    devices: raw.devices || {},
+    proDevices: raw.proDevices || {},
+    usedActivationCodes: raw.usedActivationCodes || [],
+    usedUpgradeCodes: raw.usedUpgradeCodes || [],
+    pendingClaims: raw.pendingClaims || {},
+    pendingUpgradeClaims: raw.pendingUpgradeClaims || {},
+    claimAttempts: raw.claimAttempts || {},
+  };
 }
 
 function saveStore(store) {
-  const dir = path.dirname(USAGE_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(USAGE_FILE, JSON.stringify(store, null, 2), "utf8");
+  saveJsonStore(USAGE_FILE, store);
 }
 
 function resolveCodePlan(code, env = process.env) {
@@ -494,13 +487,22 @@ export function claimPurchaseCode(deviceId, planId, env = process.env, options =
   }
 
   const configuredCodes = getCodeListsForPlan(normalizedPlanId, env);
+  if (!configuredCodes.length) {
+    const error = new Error("服务器未配置该套餐邀请码，请联系管理员（或开启手动收款模式）");
+    error.status = 503;
+    throw error;
+  }
+
   const used = getUsedCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
-  const code =
-    available[0] ||
-    generateSyntheticCode("GEN", normalizedPlanId);
+  if (!available.length) {
+    const error = new Error("该套餐邀请码已发完，请联系管理员补充或改用手动收款确认开通");
+    error.status = 503;
+    throw error;
+  }
 
-  if (configuredCodes.includes(code) && !store.usedActivationCodes.includes(code)) {
+  const code = available[0];
+  if (!store.usedActivationCodes.includes(code)) {
     store.usedActivationCodes.push(code);
   }
   store.pendingClaims[deviceId] = {
@@ -745,12 +747,29 @@ export function claimUpgradeCode(deviceId, targetPlanId, env = process.env, opti
   }
 
   const configuredCodes = getUpgradeCodeList(normalizedTargetId, env);
+  if (!configuredCodes.length) {
+    const error = new Error(
+      normalizedTargetId === "year"
+        ? "服务器未配置年卡升级邀请码（UPGRADE_CODES_YEAR），请联系管理员"
+        : "服务器未配置升级邀请码，请联系管理员"
+    );
+    error.status = 503;
+    throw error;
+  }
+
   const used = getUsedUpgradeCodesSet(store);
   const available = configuredCodes.filter((code) => !used.has(code));
-  const code =
-    available[0] ||
-    generateSyntheticCode("UPG", normalizedTargetId);
+  if (!available.length) {
+    const error = new Error(
+      normalizedTargetId === "year"
+        ? "年卡升级邀请码已发完，请联系管理员补充或使用手动收款确认升级"
+        : "该套餐升级邀请码已发完，请稍后再试"
+    );
+    error.status = 503;
+    throw error;
+  }
 
+  const code = available[0];
   store.pendingUpgradeClaims[deviceId] = {
     code,
     targetPlanId: normalizedTargetId,

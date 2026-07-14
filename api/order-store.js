@@ -1,4 +1,3 @@
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
@@ -17,36 +16,42 @@ import {
   notifyAdminNewOrder,
   notifyAdminFulfillCode,
 } from "./mail.mjs";
+import { loadJsonStore, saveJsonStore } from "./safe-json-store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ORDERS_FILE = path.join(__dirname, "..", "data", "orders.json");
+const FULFILL_LINK_TTL_SEC = 48 * 60 * 60;
+const NOTIFY_RETRY_COOLDOWN_MS = 45_000;
+const fulfillLocks = new Map();
 
 function loadOrdersStore() {
-  try {
-    if (!fs.existsSync(ORDERS_FILE)) {
-      return { orders: {} };
-    }
-    const raw = JSON.parse(fs.readFileSync(ORDERS_FILE, "utf8"));
-    return { orders: raw.orders || {} };
-  } catch {
-    return { orders: {} };
-  }
+  const raw = loadJsonStore(ORDERS_FILE, { orders: {} });
+  return { orders: raw.orders || {} };
 }
 
 function saveOrdersStore(store) {
-  const dir = path.dirname(ORDERS_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(ORDERS_FILE, JSON.stringify(store, null, 2), "utf8");
+  saveJsonStore(ORDERS_FILE, store);
 }
 
-function normalizeEmail(email) {
-  return String(email || "").trim().toLowerCase();
+function toBuffer(value) {
+  return Buffer.from(String(value || ""), "utf8");
 }
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+function safeEqual(a, b) {
+  const left = toBuffer(a);
+  const right = toBuffer(b);
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
+}
+
+function getFulfillSecret(env = process.env) {
+  return String(env.ADMIN_FULFILL_TOKEN || "").trim();
+}
+
+function signFulfillPayload(orderId, exp, env = process.env) {
+  const secret = getFulfillSecret(env);
+  if (!secret) return "";
+  return crypto.createHmac("sha256", secret).update(`${orderId}.${exp}`).digest("base64url");
 }
 
 function generateOrderId() {
@@ -97,18 +102,39 @@ function orderStatusMessage(order) {
     : `订单号 ${order.orderId}。通知已发送，请等待管理员确认，确认后自动开通。`;
 }
 
+/** Legacy global token (scripts / old emails). Prefer signed per-order links. */
 export function verifyAdminFulfillToken(token, env = process.env) {
-  const expected = String(env.ADMIN_FULFILL_TOKEN || "").trim();
+  const expected = getFulfillSecret(env);
   const given = String(token || "").trim();
-  if (!expected || !given || given.length !== expected.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  if (!expected || !given) return false;
+  return safeEqual(expected, given);
+}
+
+export function verifyFulfillAuthorization(orderId, query, env = process.env) {
+  const normalizedId = String(orderId || "").trim().toUpperCase();
+  if (!normalizedId || !getFulfillSecret(env)) return false;
+
+  const sig = String(query?.sig || "").trim();
+  const exp = String(query?.exp || "").trim();
+  if (sig && exp) {
+    const expNum = Number(exp);
+    if (!Number.isFinite(expNum) || expNum < Math.floor(Date.now() / 1000)) return false;
+    const expected = signFulfillPayload(normalizedId, exp, env);
+    return Boolean(expected) && safeEqual(expected, sig);
+  }
+
+  // Backward-compatible global token (discourage for new emails).
+  return verifyAdminFulfillToken(query?.token, env);
 }
 
 export function buildAdminFulfillUrl(orderId, env = process.env) {
-  const token = String(env.ADMIN_FULFILL_TOKEN || "").trim();
-  if (!token) return "";
+  const secret = getFulfillSecret(env);
+  if (!secret) return "";
+  const normalizedId = String(orderId || "").trim().toUpperCase();
+  const exp = String(Math.floor(Date.now() / 1000) + FULFILL_LINK_TTL_SEC);
+  const sig = signFulfillPayload(normalizedId, exp, env);
   const siteUrl = String(env.SITE_URL || "www.kjdsai.cn").replace(/^https?:\/\//, "");
-  const params = new URLSearchParams({ orderId, token });
+  const params = new URLSearchParams({ orderId: normalizedId, exp, sig });
   return `https://${siteUrl}/api/order/fulfill?${params.toString()}`;
 }
 
@@ -197,7 +223,7 @@ export function createOrder({ deviceId, planId, type }, env = process.env) {
   };
 }
 
-export function notifyOrderToAdmin(orderId, deviceId, env = process.env) {
+export async function notifyOrderToAdmin(orderId, deviceId, env = process.env) {
   const normalizedId = String(orderId || "").trim().toUpperCase();
   const normalizedDeviceId = String(deviceId || "").trim();
 
@@ -233,19 +259,56 @@ export function notifyOrderToAdmin(orderId, deviceId, env = process.env) {
     throw error;
   }
 
-  const formatted = formatOrderResponse(order);
-  if (!order.adminNotified) {
-    const fulfillUrl = buildAdminFulfillUrl(order.orderId, env);
-    void notifyAdminNewOrder(formatted, env, fulfillUrl).catch(() => {});
-    order.adminNotified = true;
-    order.notifiedAt = new Date().toISOString();
-    store.orders[normalizedId] = order;
-    saveOrdersStore(store);
+  if (order.adminNotified) {
+    const notifiedAge = order.notifiedAt
+      ? Date.now() - new Date(order.notifiedAt).getTime()
+      : Number.POSITIVE_INFINITY;
+    // 允许 30 分钟后重发，避免历史“假成功”卡住订单
+    if (Number.isFinite(notifiedAge) && notifiedAge < 30 * 60 * 1000) {
+      return {
+        ...formatOrderResponse(order),
+        message: `通知已发送，请等待管理员确认。订单号：${order.orderId}`,
+      };
+    }
+    order.adminNotified = false;
   }
+
+  if (order.notifiedAt) {
+    const elapsed = Date.now() - new Date(order.notifiedAt).getTime();
+    if (Number.isFinite(elapsed) && elapsed < NOTIFY_RETRY_COOLDOWN_MS) {
+      const waitSec = Math.ceil((NOTIFY_RETRY_COOLDOWN_MS - elapsed) / 1000);
+      const error = new Error(`通知发送中或刚失败，请 ${waitSec} 秒后再试`);
+      error.status = 429;
+      throw error;
+    }
+  }
+
+  const formatted = formatOrderResponse(order);
+  const fulfillUrl = buildAdminFulfillUrl(order.orderId, env);
+  order.notifiedAt = new Date().toISOString();
+  store.orders[normalizedId] = order;
+  saveOrdersStore(store);
+
+  const notifyResult = await notifyAdminNewOrder(formatted, env, fulfillUrl);
+  const sent = Boolean(notifyResult.email?.sent || notifyResult.wechat?.sent);
+  if (!sent) {
+    const error = new Error(
+      notifyResult.email?.error ||
+        notifyResult.wechat?.error ||
+        "管理员通知发送失败，请稍后重试或联系客服"
+    );
+    error.status = 502;
+    throw error;
+  }
+
+  order.adminNotified = true;
+  order.notifiedAt = new Date().toISOString();
+  store.orders[normalizedId] = order;
+  saveOrdersStore(store);
 
   return {
     ...formatOrderResponse(order),
-    message: `通知已发送到管理员邮箱，请等待确认。订单号：${order.orderId}`,
+    message: `通知已发送到管理员，请等待确认。订单号：${order.orderId}`,
   };
 }
 
@@ -298,13 +361,28 @@ export function lookupOrder(orderId, deviceId) {
   return getOrderStatus(orderId, deviceId);
 }
 
-export async function fulfillOrderIfAuthorized(orderId, token, env = process.env) {
-  if (!verifyAdminFulfillToken(token, env)) {
-    const error = new Error("确认链接无效，请检查 ADMIN_FULFILL_TOKEN 或改用命令行确认");
+export async function fulfillOrderIfAuthorized(orderId, authQuery, env = process.env) {
+  const query =
+    typeof authQuery === "string"
+      ? { token: authQuery }
+      : authQuery && typeof authQuery === "object"
+        ? authQuery
+        : {};
+  if (!verifyFulfillAuthorization(orderId, query, env)) {
+    const error = new Error("确认链接无效或已过期，请使用最新邮件中的链接，或在服务器执行 node scripts/fulfill-order.mjs <订单号>");
     error.status = 403;
     throw error;
   }
-  return fulfillOrder(orderId, env);
+
+  const normalizedId = String(orderId || "").trim().toUpperCase();
+  if (fulfillLocks.has(normalizedId)) {
+    return fulfillLocks.get(normalizedId);
+  }
+  const task = fulfillOrder(normalizedId, env).finally(() => {
+    fulfillLocks.delete(normalizedId);
+  });
+  fulfillLocks.set(normalizedId, task);
+  return task;
 }
 
 export function listOrders({ status } = {}) {

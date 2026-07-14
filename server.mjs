@@ -4,15 +4,63 @@ import path from "path";
 import os from "os";
 import { exec } from "child_process";
 import { fileURLToPath } from "url";
-import { handleGenerateRequest, getUsageStatus, activateDevice, claimPurchaseCode, claimUpgradeCode, getActivationInventory, upgradePlan, getUpgradeInventory } from "./api/generate-handler.js";
-import { createOrder, lookupOrder, getOrderStatus, getCurrentOrderForDevice, notifyOrderToAdmin, fulfillOrderIfAuthorized, isManualPaymentMode } from "./api/order-store.js";
+import {
+  handleGenerateRequest,
+  getUsageStatus,
+  activateDevice,
+  claimPurchaseCode,
+  claimUpgradeCode,
+  getActivationInventory,
+  upgradePlan,
+  getUpgradeInventory,
+} from "./api/generate-handler.js";
+import {
+  createOrder,
+  lookupOrder,
+  getOrderStatus,
+  getCurrentOrderForDevice,
+  notifyOrderToAdmin,
+  fulfillOrderIfAuthorized,
+  isManualPaymentMode,
+} from "./api/order-store.js";
 import { getPurchaseInfo } from "./api/pricing-plans.js";
 import { sendContactMessage } from "./api/mail.mjs";
 import { SUPPORTED_LANGUAGES } from "./languages.js";
+import { checkRateLimit, clientKey } from "./api/rate-limit.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 5173;
 const HOST = "0.0.0.0";
+const MAX_BODY_BYTES = 64 * 1024;
+
+const STATIC_ALLOWED_EXT = new Set([
+  ".html",
+  ".css",
+  ".js",
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".ico",
+  ".xml",
+  ".txt",
+  ".webmanifest",
+  ".woff",
+  ".woff2",
+  ".map",
+]);
+
+const STATIC_BLOCKED_SEGMENTS = new Set([
+  "data",
+  "api",
+  "scripts",
+  "deploy",
+  "node_modules",
+  ".git",
+  ".cursor",
+]);
 
 function loadEnv() {
   const env = { ...process.env };
@@ -31,21 +79,40 @@ function loadEnv() {
       if (key) env[key] = value;
     }
   } catch {
-    // .env is optional if env var is set elsewhere
+    // .env optional
   }
   return env;
 }
 
 const env = loadEnv();
 
-function setCorsHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+function allowedCorsOrigin(req) {
+  const origin = String(req.headers.origin || "").trim();
+  const site = String(env.SITE_URL || "www.kjdsai.cn")
+    .replace(/^https?:\/\//, "")
+    .replace(/\/$/, "");
+  const allowList = new Set([
+    `https://${site}`,
+    `https://www.${site.replace(/^www\./, "")}`,
+    `http://${site}`,
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+  ]);
+  if (origin && allowList.has(origin)) return origin;
+  if (!origin) return "";
+  return `https://${site}`;
+}
+
+function setCorsHeaders(req, res) {
+  const origin = allowedCorsOrigin(req);
+  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-function sendJson(res, status, data) {
-  setCorsHeaders(res);
+function sendJson(req, res, status, data) {
+  setCorsHeaders(req, res);
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
 }
@@ -55,13 +122,26 @@ function sendHtml(res, status, html) {
   res.end(html);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function renderFulfillPage({ title, message, code, orderId, ok }) {
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
+  const safeOrderId = escapeHtml(orderId);
+  const safeCode = escapeHtml(code);
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
+  <title>${safeTitle}</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 520px; margin: 48px auto; padding: 0 16px; color: #111827; }
     .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; background: #fff; }
@@ -72,20 +152,27 @@ function renderFulfillPage({ title, message, code, orderId, ok }) {
 </head>
 <body>
   <div class="card">
-    <h1>${title}</h1>
-    <p>${message}</p>
-    ${orderId ? `<p>订单号：<strong>${orderId}</strong></p>` : ""}
-    ${code ? `<p>邀请码：<span class="code">${code}</span></p>` : ""}
-    ${ok ? "<p>用户付款页面的订单号下方会自动显示邀请码。</p>" : ""}
+    <h1>${safeTitle}</h1>
+    <p>${safeMessage}</p>
+    ${safeOrderId ? `<p>订单号：<strong>${safeOrderId}</strong></p>` : ""}
+    ${safeCode ? `<p>邀请码：<span class="code">${safeCode}</span></p>` : ""}
+    ${ok ? "<p>会员将自动开通/升级，用户页面会同步刷新。</p>" : ""}
   </div>
 </body>
 </html>`;
 }
 
-function readBody(req) {
+function readBody(req, { maxBytes = MAX_BODY_BYTES } = {}) {
   return new Promise((resolve, reject) => {
     let body = "";
+    let size = 0;
     req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error("请求体过大"), { status: 413 }));
+        req.destroy();
+        return;
+      }
       body += chunk;
     });
     req.on("end", () => resolve(body));
@@ -93,39 +180,97 @@ function readBody(req) {
   });
 }
 
+function assertRateLimit(req, res, suffix, options) {
+  const result = checkRateLimit(clientKey(req, suffix), options);
+  if (!result.ok) {
+    res.setHeader("Retry-After", String(result.retryAfterSec || 60));
+    sendJson(req, res, 429, { error: result.error });
+    return false;
+  }
+  return true;
+}
+
+function isBlockedStaticPath(relativePath) {
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized) return true;
+  if (normalized.startsWith(".")) return true;
+  if (normalized.includes("/.")) return true;
+  if (normalized.toLowerCase().endsWith(".env") || normalized.toLowerCase().includes(".env.")) {
+    return true;
+  }
+  if (/\.(mjs|cjs|ts|md|json|py|sh|bat|ps1|yml|yaml|lock|zip|docx|pptx|doc)$/i.test(normalized)) {
+    // Allow only explicit public json/webmanifest/xml via extension whitelist below;
+    // block generic source/config dumps.
+    if (!/\.(webmanifest|xml|txt)$/i.test(normalized) && !normalized.startsWith("assets/")) {
+      if (/\.(json|mjs|cjs|ts|md|py|sh|zip|docx|pptx)$/i.test(normalized)) return true;
+    }
+  }
+  const parts = normalized.split("/");
+  if (STATIC_BLOCKED_SEGMENTS.has(parts[0])) return true;
+  return false;
+}
+
+function resolveFilePath(url) {
+  if (url === "/" || url === "/index.html") {
+    return path.join(__dirname, "index.html");
+  }
+  if (url === "/mobile" || url === "/mobile/") {
+    return path.join(__dirname, "mobile", "index.html");
+  }
+
+  const relative = decodeURIComponent(url.replace(/^\//, "")).replace(/\//g, path.sep);
+  if (!relative || isBlockedStaticPath(relative.replace(/\\/g, "/"))) return null;
+
+  const full = path.resolve(__dirname, relative);
+  const root = path.resolve(__dirname);
+  if (full !== root && !full.startsWith(root + path.sep)) return null;
+
+  const ext = path.extname(full).toLowerCase();
+  if (!STATIC_ALLOWED_EXT.has(ext)) return null;
+
+  // Root-level: only known public files (not package.json etc — already blocked by ext)
+  const relPosix = full.slice(root.length + 1).replace(/\\/g, "/");
+  if (!relPosix.includes("/")) {
+    const allowedRoot = new Set([
+      "index.html",
+      "robots.txt",
+      "sitemap.xml",
+      "languages.js",
+      "favicon.ico",
+    ]);
+    if (
+      !allowedRoot.has(relPosix) &&
+      !/^baidu_verify_[A-Za-z0-9_-]+\.html$/i.test(relPosix)
+    ) {
+      return null;
+    }
+  }
+
+  return full;
+}
+
 async function handleRequest(req, res) {
   const url = req.url.split("?")[0];
 
   if (req.method === "OPTIONS") {
-    setCorsHeaders(res);
+    setCorsHeaders(req, res);
     res.writeHead(204);
     res.end();
     return;
   }
 
   if (url === "/api/health") {
-    sendJson(res, 200, {
-      ok: true,
-      hasApiKey: Boolean(env.DEEPSEEK_API_KEY),
-      hasActivationCodes: Boolean(env.ACTIVATION_CODES_MONTH || env.ACTIVATION_CODES_HALF || env.ACTIVATION_CODES_YEAR || env.ACTIVATION_CODES),
-      hasUpgradeCodes: Boolean(env.UPGRADE_CODES_HALF || env.UPGRADE_CODES_YEAR),
-      envFile: path.join(__dirname, ".env"),
-      envFileExists: fs.existsSync(path.join(__dirname, ".env")),
-      cwd: process.cwd(),
-      message: env.DEEPSEEK_API_KEY
-        ? "服务器运行正常"
-        : "服务器已启动，但未配置 DEEPSEEK_API_KEY",
-    });
+    sendJson(req, res, 200, { ok: true });
     return;
   }
 
   if (url === "/api/languages") {
-    sendJson(res, 200, { languages: SUPPORTED_LANGUAGES });
+    sendJson(req, res, 200, { languages: SUPPORTED_LANGUAGES });
     return;
   }
 
   if (url === "/api/pricing") {
-    sendJson(res, 200, {
+    sendJson(req, res, 200, {
       ...getPurchaseInfo(env),
       activationInventory: getActivationInventory(env),
       upgradeInventory: getUpgradeInventory(env),
@@ -134,6 +279,9 @@ async function handleRequest(req, res) {
   }
 
   if (url === "/api/contact" && req.method === "POST") {
+    if (!assertRateLimit(req, res, "contact", { limit: 5, windowMs: 60 * 60 * 1000, message: "留言过于频繁，请一小时后再试" })) {
+      return;
+    }
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
@@ -146,18 +294,18 @@ async function handleRequest(req, res) {
         env
       );
       if (!result.sent) {
-        sendJson(res, 500, { error: result.error || "发送失败" });
+        sendJson(req, res, 500, { error: result.error || "发送失败" });
         return;
       }
-      sendJson(res, 200, { ok: true, message: result.message || "留言已发送" });
+      sendJson(req, res, 200, { ok: true, message: result.message || "留言已发送" });
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "发送失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "发送失败" });
     }
     return;
   }
 
   if (url === "/api/contact") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
@@ -165,90 +313,97 @@ async function handleRequest(req, res) {
     const query = new URL(req.url, "http://localhost").searchParams;
     const deviceId = query.get("deviceId");
     if (!deviceId) {
-      sendJson(res, 400, { error: "缺少 deviceId" });
+      sendJson(req, res, 400, { error: "缺少 deviceId" });
       return;
     }
-    sendJson(res, 200, getUsageStatus(deviceId, env));
+    sendJson(req, res, 200, getUsageStatus(deviceId, env));
     return;
   }
 
   if (url === "/api/purchase" && req.method === "POST") {
     if (isManualPaymentMode(env)) {
-      sendJson(res, 403, { error: "请提交订单并等待确认收款，勿直接领取邀请码" });
+      sendJson(req, res, 403, { error: "请提交订单并等待确认收款，勿直接领取邀请码" });
       return;
     }
+    if (!assertRateLimit(req, res, "purchase", { limit: 10, windowMs: 60 * 60 * 1000 })) return;
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
       const result = claimPurchaseCode(payload.deviceId, payload.planId, env);
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "开通失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "开通失败" });
     }
     return;
   }
 
   if (url === "/api/purchase") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
   if (url === "/api/claim-upgrade" && req.method === "POST") {
     if (isManualPaymentMode(env)) {
-      sendJson(res, 403, { error: "请提交升级订单并等待确认收款，勿直接领取邀请码" });
+      sendJson(req, res, 403, { error: "请提交升级订单并等待确认收款，勿直接领取邀请码" });
       return;
     }
+    if (!assertRateLimit(req, res, "claim-upgrade", { limit: 10, windowMs: 60 * 60 * 1000 })) return;
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
       const result = claimUpgradeCode(payload.deviceId, payload.planId, env);
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "领取失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "领取失败" });
     }
     return;
   }
 
   if (url === "/api/claim-upgrade") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
   if (url === "/api/upgrade" && req.method === "POST") {
+    if (!assertRateLimit(req, res, "upgrade", { limit: 20, windowMs: 60 * 60 * 1000 })) return;
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
       const result = upgradePlan(payload.deviceId, payload.planId, payload.upgradeCode, env);
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "升级失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "升级失败" });
     }
     return;
   }
 
   if (url === "/api/upgrade") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
   if (url === "/api/activate" && req.method === "POST") {
+    if (!assertRateLimit(req, res, "activate", { limit: 20, windowMs: 60 * 60 * 1000 })) return;
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
       const result = activateDevice(payload.deviceId, payload.code, env);
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "激活失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "激活失败" });
     }
     return;
   }
 
   if (url === "/api/activate") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
   if (url === "/api/order/create" && req.method === "POST") {
+    if (!assertRateLimit(req, res, "order-create", { limit: 15, windowMs: 60 * 60 * 1000, message: "创建订单过于频繁，请稍后再试" })) {
+      return;
+    }
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
@@ -260,32 +415,35 @@ async function handleRequest(req, res) {
         },
         env
       );
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "创建订单失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "创建订单失败" });
     }
     return;
   }
 
   if (url === "/api/order/create") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
   if (url === "/api/order/notify" && req.method === "POST") {
+    if (!assertRateLimit(req, res, "order-notify", { limit: 20, windowMs: 60 * 60 * 1000, message: "发送通知过于频繁，请稍后再试" })) {
+      return;
+    }
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
-      const result = notifyOrderToAdmin(payload.orderId, payload.deviceId, env);
-      sendJson(res, 200, result);
+      const result = await notifyOrderToAdmin(payload.orderId, payload.deviceId, env);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "发送通知失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "发送通知失败" });
     }
     return;
   }
 
   if (url === "/api/order/notify") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
     return;
   }
 
@@ -293,9 +451,9 @@ async function handleRequest(req, res) {
     try {
       const query = new URL(req.url, "http://localhost").searchParams;
       const result = lookupOrder(query.get("orderId"), query.get("deviceId"));
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "查询失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "查询失败" });
     }
     return;
   }
@@ -305,7 +463,11 @@ async function handleRequest(req, res) {
       const query = new URL(req.url, "http://localhost").searchParams;
       const result = await fulfillOrderIfAuthorized(
         query.get("orderId"),
-        query.get("token"),
+        {
+          token: query.get("token"),
+          sig: query.get("sig"),
+          exp: query.get("exp"),
+        },
         env
       );
       sendHtml(
@@ -314,7 +476,7 @@ async function handleRequest(req, res) {
         renderFulfillPage({
           ok: true,
           title: "已确认收款",
-          message: result.message || "邀请码已发放。",
+          message: result.message || "会员已处理完成。",
           orderId: result.orderId,
           code: result.code,
         })
@@ -337,9 +499,9 @@ async function handleRequest(req, res) {
     try {
       const query = new URL(req.url, "http://localhost").searchParams;
       const order = getCurrentOrderForDevice(query.get("deviceId"));
-      sendJson(res, 200, { order });
+      sendJson(req, res, 200, { order });
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "查询失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "查询失败" });
     }
     return;
   }
@@ -348,21 +510,24 @@ async function handleRequest(req, res) {
     try {
       const query = new URL(req.url, "http://localhost").searchParams;
       const result = getOrderStatus(query.get("orderId"), query.get("deviceId"));
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, { error: error.message || "查询失败" });
+      sendJson(req, res, error.status || 500, { error: error.message || "查询失败" });
     }
     return;
   }
 
   if (url === "/api/generate" && req.method === "POST") {
+    if (!assertRateLimit(req, res, "generate", { limit: 60, windowMs: 60 * 60 * 1000, message: "生成请求过于频繁，请稍后再试" })) {
+      return;
+    }
     try {
       const body = await readBody(req);
       const payload = body ? JSON.parse(body) : {};
       const result = await handleGenerateRequest(payload, env);
-      sendJson(res, 200, result);
+      sendJson(req, res, 200, result);
     } catch (error) {
-      sendJson(res, error.status || 500, {
+      sendJson(req, res, error.status || 500, {
         error: error.message || "Internal server error",
       });
     }
@@ -370,7 +535,12 @@ async function handleRequest(req, res) {
   }
 
   if (url === "/api/generate") {
-    sendJson(res, 405, { error: "Method not allowed" });
+    sendJson(req, res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  if (url.startsWith("/api/")) {
+    sendJson(req, res, 404, { error: "Not Found" });
     return;
   }
 
@@ -381,39 +551,37 @@ async function handleRequest(req, res) {
     return;
   }
 
-  const normalizedRoot = path.resolve(__dirname);
-  const normalizedFile = path.resolve(filePath);
-
-  if (!normalizedFile.startsWith(normalizedRoot)) {
-    res.writeHead(403);
-    res.end("Forbidden");
-    return;
-  }
-
-  fs.readFile(normalizedFile, (err, data) => {
+  fs.readFile(filePath, (err, data) => {
     if (err) {
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not Found");
       return;
     }
 
-    const ext = path.extname(normalizedFile);
+    const ext = path.extname(filePath).toLowerCase();
     const types = {
       ".html": "text/html; charset=utf-8",
       ".css": "text/css; charset=utf-8",
       ".js": "application/javascript; charset=utf-8",
-      ".json": "application/json; charset=utf-8",
       ".webmanifest": "application/manifest+json; charset=utf-8",
       ".svg": "image/svg+xml; charset=utf-8",
       ".png": "image/png",
       ".jpg": "image/jpeg",
       ".jpeg": "image/jpeg",
       ".webp": "image/webp",
+      ".gif": "image/gif",
+      ".ico": "image/x-icon",
       ".xml": "application/xml; charset=utf-8",
       ".txt": "text/plain; charset=utf-8",
+      ".woff": "font/woff",
+      ".woff2": "font/woff2",
+      ".map": "application/json; charset=utf-8",
     };
 
-    const headers = { "Content-Type": types[ext] || "text/plain; charset=utf-8" };
+    const headers = {
+      "Content-Type": types[ext] || "application/octet-stream",
+      "X-Content-Type-Options": "nosniff",
+    };
     if (ext === ".html") {
       headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
     }
@@ -421,18 +589,6 @@ async function handleRequest(req, res) {
     res.writeHead(200, headers);
     res.end(data);
   });
-}
-
-function resolveFilePath(url) {
-  if (url === "/" || url === "/index.html") {
-    return path.join(__dirname, "index.html");
-  }
-  if (url === "/mobile" || url === "/mobile/") {
-    return path.join(__dirname, "mobile", "index.html");
-  }
-  const relative = url.replace(/^\//, "").replace(/\//g, path.sep);
-  if (!relative) return null;
-  return path.join(__dirname, relative);
 }
 
 function getLocalIp() {
@@ -449,7 +605,7 @@ const server = http.createServer((req, res) => {
   handleRequest(req, res).catch((error) => {
     console.error("Unhandled request error:", error);
     if (!res.headersSent) {
-      sendJson(res, 500, { error: error.message || "Internal server error" });
+      sendJson(req, res, 500, { error: error.message || "Internal server error" });
     }
   });
 });
@@ -469,14 +625,9 @@ server.listen(PORT, HOST, () => {
     console.log(`    http://${ip}:${PORT}/mobile/  （手机连同一 WiFi 访问）`);
   }
   console.log("");
-  console.log("  收款码测试:");
-  console.log(`    http://127.0.0.1:${PORT}/assets/payment/wechat-pay.png`);
   if (!env.DEEPSEEK_API_KEY) {
-    console.log("");
     console.log("  [警告] 未检测到 DEEPSEEK_API_KEY");
-    console.log("  请在 .env 文件中配置 API Key");
   }
-  console.log("");
   console.log("  按 Ctrl+C 停止服务器");
   console.log("========================================");
   console.log("");

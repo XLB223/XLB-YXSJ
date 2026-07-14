@@ -204,10 +204,12 @@ export async function notifyAdminNewOrder(order, env = process.env, fulfillUrl =
     "",
     "请打开微信/支付宝收款记录，核对备注中的订单号与金额。",
     fulfillUrl
-      ? "确认收款后，点击下面链接发放邀请码（用户付款页将自动显示）："
+      ? "确认收款后，点击下面短时有效链接自动开通/升级（48 小时内有效）："
       : "确认收款后在服务器执行：",
     fulfillUrl || `node scripts/fulfill-order.mjs ${order.orderId}`,
     fulfillUrl ? fulfillUrl : "",
+    "",
+    "也可用命令行确认：node scripts/fulfill-order.mjs " + order.orderId,
   ]
     .filter(Boolean)
     .join("\n");
@@ -223,24 +225,27 @@ export async function notifyAdminNewOrder(order, env = process.env, fulfillUrl =
 export async function notifyAdminFulfillCode(order, code, env = process.env) {
   const adminEmail = adminNotifyEmail(env);
   const planName = order.planName || order.planId;
-  const typeLabel = order.type === "upgrade" ? "升级邀请码" : "会员邀请码";
-  const title = `【已发码】${order.orderId}`;
+  const typeLabel = order.type === "upgrade" ? "升级" : "开通";
+  const title = `【已确认】${order.orderId}`;
   const text = [
-    "订单已确认收款，邀请码已发放：",
+    "订单已确认收款，会员已自动处理：",
     "",
     `订单号：${order.orderId}`,
     `套餐：${planName}（${order.amountLabel}）`,
-    `${typeLabel}：${code}`,
+    `类型：${typeLabel}`,
+    code ? `关联码：${code}` : "",
     "",
-    "用户付款页面的订单号下方会自动显示此邀请码，无需手动转发。",
-  ].join("\n");
+    "用户页面会自动刷新显示会员状态。",
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const emailResult = adminEmail
     ? await sendEmail({ to: adminEmail, subject: title, text }, env)
     : { sent: false, error: "未配置 ADMIN_NOTIFY_EMAIL" };
   const wechatResult = await sendWeChatNotify(
     title,
-    `${typeLabel}：${code}\n套餐：${planName}\n用户付款页已自动显示`,
+    `${typeLabel}完成\n套餐：${planName}\n订单：${order.orderId}`,
     env
   );
 
@@ -294,12 +299,10 @@ export async function sendOrderCodeEmail(
     "",
     "使用步骤：",
     `1. 打开 https://${siteUrl.replace(/^https?:\/\//, "")}`,
-    "2. 点击「查询订单」，输入订单号和邮箱查看邀请码",
-    type === "upgrade"
-      ? "3. 在升级弹窗中手动输入邀请码，点击「输入邀请码并升级」"
-      : "3. 在开通弹窗中手动输入邀请码，点击「输入邀请码并开通」",
+    "2. 刷新页面或点击「查询订单」查看开通状态",
+    "3. 管理员确认收款后一般会自动开通/升级，无需重复操作",
     "",
-    "每个邀请码仅限一台电脑使用，请勿分享。",
+    "会员绑定当前电脑，换电脑请联系客服解绑。",
   ].join("\n");
 
   return sendEmail({ to, subject, text }, env);
